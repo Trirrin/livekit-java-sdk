@@ -10,52 +10,61 @@ This guide will help you get started with the LiveKit Java SDK.
 
 ## Installation
 
+[![](https://jitpack.io/v/Trirrin/livekit-java-sdk.svg)](https://jitpack.io/#Trirrin/livekit-java-sdk)
+
 ### Gradle (Kotlin DSL)
 
 ```kotlin
-repositories {
-    mavenCentral()
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
 }
 
+// build.gradle.kts
 dependencies {
-    implementation("io.livekit:core:0.1.0-SNAPSHOT")
-    implementation("io.livekit:signaling:0.1.0-SNAPSHOT")
-    implementation("io.livekit:rtc:0.1.0-SNAPSHOT")
+    // Full SDK with WebRTC support
+    implementation("com.github.Trirrin.livekit-java-sdk:rtc:v0.1.0")
+    
+    // Or signaling only (no audio/video)
+    // implementation("com.github.Trirrin.livekit-java-sdk:signaling:v0.1.0")
 }
 ```
 
 ### Gradle (Groovy DSL)
 
 ```groovy
-repositories {
-    mavenCentral()
+// settings.gradle
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
 }
 
+// build.gradle
 dependencies {
-    implementation 'io.livekit:core:0.1.0-SNAPSHOT'
-    implementation 'io.livekit:signaling:0.1.0-SNAPSHOT'
-    implementation 'io.livekit:rtc:0.1.0-SNAPSHOT'
+    implementation 'com.github.Trirrin.livekit-java-sdk:rtc:v0.1.0'
 }
 ```
 
 ### Maven
 
 ```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+
 <dependencies>
     <dependency>
-        <groupId>io.livekit</groupId>
-        <artifactId>core</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-        <groupId>io.livekit</groupId>
-        <artifactId>signaling</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-        <groupId>io.livekit</groupId>
+        <groupId>com.github.Trirrin.livekit-java-sdk</groupId>
         <artifactId>rtc</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>v0.1.0</version>
     </dependency>
 </dependencies>
 ```
