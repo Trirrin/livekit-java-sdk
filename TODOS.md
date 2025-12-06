@@ -30,8 +30,6 @@
    - JUnit 5 tests passing
    - Modules: protocol, core, signaling
 
-### In Progress
-
 5. Protocol & signaling [DONE]
    - [x] Import livekit/protocol protobufs and generate Java classes.
    - [x] Implement WebSocket signaling: join/offer/answer/track updates/ping-pong/room state, token parsing.
@@ -42,17 +40,17 @@
      - Enhanced `SignalClient` with ICE server management and restart triggers
      - Added `onIceServersUpdated` and `onIceRestartRequired` listener callbacks
 
+6. Room integration [DONE]
+   - [x] Connect Room to SignalClient via `LiveKitClient` and `RoomSignalHandler`
+   - [x] Map protobuf messages to SDK types via `ProtoConverter`
+   - [x] Implement participant/track synchronization (join, update, leave, track pub/unpub, mute)
+
 ### Pending
 
-6. RTC/media stack selection
+7. RTC/media stack selection
    - [ ] Choose Java-accessible WebRTC implementation (libwebrtc JNI build vs alternative)
    - [ ] Validate media/datachannel interoperability with official SDKs
    - [ ] Plan audio processing (AEC/NS/AGC) and video encoding params
-
-7. Room integration
-   - [ ] Connect Room to SignalClient
-   - [ ] Map protobuf messages to SDK types
-   - [ ] Implement participant/track synchronization
 
 8. Resilience & security
    - [ ] Implement resume tokens and network change handling
@@ -66,3 +64,15 @@
 10. Packaging
     - [ ] Gradle/Maven artifacts
     - [ ] Documentation and examples
+
+---
+
+## Progress Log
+
+### 2024-12-06: Task 6 (Room Integration) Completed
+- Created `ProtoConverter` for mapping protobuf messages to SDK types
+- Enhanced `Room` with signal handling methods for join, participants, tracks, room updates
+- Created `RoomSignalHandler` to bridge SignalClient events to Room
+- Created `LiveKitClient` as main entry point coordinating Room + SignalClient
+- Added comprehensive unit tests for `ProtoConverter` and `RoomSignalHandler`
+- All tests passing

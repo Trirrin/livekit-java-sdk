@@ -1,5 +1,9 @@
 package io.livekit.sdk;
 
+import livekit.LivekitModels;
+import livekit.LivekitRtc;
+
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +23,7 @@ public class Room {
     private final Map<String, RemoteParticipant> remoteParticipants;
     private final List<RoomListener> listeners;
     private final RoomOptions options;
+    private RoomSignalHandler signalHandler;
 
     public Room() {
         this(new RoomOptions());
@@ -32,6 +37,17 @@ public class Room {
     }
 
     /**
+     * Get the signal handler for this room.
+     * Used by signaling module to integrate with the room.
+     */
+    public RoomSignalHandler getSignalHandler() {
+        if (signalHandler == null) {
+            signalHandler = new RoomSignalHandler(this);
+        }
+        return signalHandler;
+    }
+
+    /**
      * Connect to a LiveKit room.
      *
      * @param url   WebSocket URL of the LiveKit server
@@ -42,7 +58,7 @@ public class Room {
             throw new IllegalStateException("Already connected or connecting");
         }
         setState(ConnectionState.CONNECTING);
-        // Will be implemented with signaling module
+        // Actual connection is handled by LiveKitClient which coordinates Room + SignalClient
     }
 
     /**
@@ -52,8 +68,8 @@ public class Room {
         if (state == ConnectionState.DISCONNECTED) {
             return;
         }
-        // Send leave request via signaling
         setState(ConnectionState.DISCONNECTED);
+        clearParticipants();
         notifyDisconnected(DisconnectReason.CLIENT_INITIATED);
     }
 
@@ -65,6 +81,198 @@ public class Room {
             throw new IllegalStateException("Not connected");
         }
         // Will be implemented with RTC data channel
+    }
+
+    void clearParticipants() {
+        remoteParticipants.clear();
+        localParticipant = null;
+    }
+
+    // Signal handler callbacks for processing server messages
+    void handleJoinResponse(LivekitRtc.JoinResponse response) {
+        this.sid = response.getRoom().getSid();
+        this.name = response.getRoom().getName();
+        this.metadata = response.getRoom().getMetadata();
+
+        // Create local participant
+        this.localParticipant = ProtoConverter.localParticipantFromProto(response.getParticipant());
+
+        // Add local participant tracks
+        for (LivekitModels.TrackInfo trackInfo : response.getParticipant().getTracksList()) {
+            TrackPublication pub = ProtoConverter.trackPublicationFromProto(trackInfo);
+            localParticipant.addTrackPublication(pub);
+        }
+
+        // Process other participants
+        for (LivekitModels.ParticipantInfo info : response.getOtherParticipantsList()) {
+            handleParticipantInfo(info);
+        }
+
+        setState(ConnectionState.CONNECTED);
+        notifyConnected();
+    }
+
+    void handleParticipantUpdate(LivekitRtc.ParticipantUpdate update) {
+        for (LivekitModels.ParticipantInfo info : update.getParticipantsList()) {
+            handleParticipantInfo(info);
+        }
+    }
+
+    private void handleParticipantInfo(LivekitModels.ParticipantInfo info) {
+        // Skip if this is us
+        if (localParticipant != null && info.getSid().equals(localParticipant.getSid())) {
+            ProtoConverter.updateParticipantFromProto(localParticipant, info);
+            syncParticipantTracks(localParticipant, info.getTracksList());
+            return;
+        }
+
+        RemoteParticipant participant = remoteParticipants.get(info.getIdentity());
+
+        if (info.getState() == LivekitModels.ParticipantInfo.State.DISCONNECTED) {
+            // Participant left
+            if (participant != null) {
+                removeRemoteParticipant(info.getIdentity());
+            }
+            return;
+        }
+
+        boolean isNew = (participant == null);
+        if (isNew) {
+            participant = ProtoConverter.remoteParticipantFromProto(info);
+            remoteParticipants.put(info.getIdentity(), participant);
+        } else {
+            ProtoConverter.updateParticipantFromProto(participant, info);
+        }
+
+        syncParticipantTracks(participant, info.getTracksList());
+
+        if (isNew) {
+            notifyParticipantConnected(participant);
+        }
+    }
+
+    private void syncParticipantTracks(Participant participant, List<LivekitModels.TrackInfo> trackInfos) {
+        Map<String, TrackPublication> currentPubs = participant.getTrackPublications();
+
+        // Track which sids we've seen
+        java.util.Set<String> seenSids = new java.util.HashSet<>();
+
+        for (LivekitModels.TrackInfo info : trackInfos) {
+            seenSids.add(info.getSid());
+
+            TrackPublication existing = currentPubs.get(info.getSid());
+            if (existing != null) {
+                boolean wasMuted = existing.isMuted();
+                ProtoConverter.updateTrackPublicationFromProto(existing, info);
+                if (wasMuted != existing.isMuted()) {
+                    if (existing.isMuted()) {
+                        notifyTrackMuted(existing, participant);
+                    } else {
+                        notifyTrackUnmuted(existing, participant);
+                    }
+                }
+            } else {
+                TrackPublication pub = ProtoConverter.trackPublicationFromProto(info);
+                participant.addTrackPublication(pub);
+                notifyTrackPublished(pub, participant);
+            }
+        }
+
+        // Remove tracks no longer present
+        List<String> toRemove = new ArrayList<>();
+        for (String sid : currentPubs.keySet()) {
+            if (!seenSids.contains(sid)) {
+                toRemove.add(sid);
+            }
+        }
+        for (String sid : toRemove) {
+            TrackPublication pub = currentPubs.get(sid);
+            participant.removeTrackPublication(sid);
+            notifyTrackUnpublished(pub, participant);
+        }
+    }
+
+    void handleRoomUpdate(LivekitRtc.RoomUpdate update) {
+        LivekitModels.Room room = update.getRoom();
+        this.sid = room.getSid();
+        this.name = room.getName();
+        String prevMetadata = this.metadata;
+        this.metadata = room.getMetadata();
+        if (prevMetadata != null && !prevMetadata.equals(this.metadata)) {
+            notifyRoomMetadataChanged(this.metadata);
+        }
+    }
+
+    void handleSpeakersChanged(LivekitRtc.SpeakersChanged changed) {
+        List<Participant> activeSpeakers = new ArrayList<>();
+        for (LivekitModels.SpeakerInfo speaker : changed.getSpeakersList()) {
+            Participant p = findParticipantBySid(speaker.getSid());
+            if (p != null) {
+                p.setSpeaking(speaker.getActive());
+                p.setAudioLevel((long) (speaker.getLevel() * 100));
+                if (speaker.getActive()) {
+                    activeSpeakers.add(p);
+                }
+            }
+        }
+        notifyActiveSpeakersChanged(activeSpeakers);
+    }
+
+    void handleConnectionQualityUpdate(LivekitRtc.ConnectionQualityUpdate update) {
+        for (LivekitRtc.ConnectionQualityInfo info : update.getUpdatesList()) {
+            Participant p = findParticipantBySid(info.getParticipantSid());
+            if (p != null) {
+                ConnectionQuality quality = ProtoConverter.fromProto(info.getQuality());
+                p.setConnectionQuality(quality);
+                notifyConnectionQualityChanged(p, quality);
+            }
+        }
+    }
+
+    void handleMuteTrack(LivekitRtc.MuteTrackRequest mute) {
+        if (localParticipant == null) return;
+        TrackPublication pub = localParticipant.getTrackPublication(mute.getSid());
+        if (pub != null) {
+            pub.setMuted(mute.getMuted());
+            if (mute.getMuted()) {
+                notifyTrackMuted(pub, localParticipant);
+            } else {
+                notifyTrackUnmuted(pub, localParticipant);
+            }
+        }
+    }
+
+    void handleLeave(LivekitRtc.LeaveRequest leave) {
+        DisconnectReason reason = ProtoConverter.fromProto(leave.getReason());
+        setState(ConnectionState.DISCONNECTED);
+        clearParticipants();
+        notifyDisconnected(reason);
+    }
+
+    void handleReconnecting() {
+        setState(ConnectionState.RECONNECTING);
+        notifyReconnecting();
+    }
+
+    void handleReconnected() {
+        setState(ConnectionState.CONNECTED);
+        notifyReconnected();
+    }
+
+    void handleSignalError(Exception e) {
+        // Could implement error callback
+    }
+
+    private Participant findParticipantBySid(String sid) {
+        if (localParticipant != null && localParticipant.getSid().equals(sid)) {
+            return localParticipant;
+        }
+        for (RemoteParticipant p : remoteParticipants.values()) {
+            if (p.getSid().equals(sid)) {
+                return p;
+            }
+        }
+        return null;
     }
 
     public String getSid() {
