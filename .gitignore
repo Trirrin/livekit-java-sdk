@@ -1,0 +1,12 @@
+.claude-context/
+.gradle/
+build/
+*/build/
+out/
+*.iml
+.idea/
+*.log
+*.tmp
+
+# Upstream reference repo (not needed in version control)
+protocol/upstream/
