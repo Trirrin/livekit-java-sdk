@@ -1,5 +1,7 @@
 package io.livekit.sdk;
 
+import io.livekit.sdk.e2ee.E2EEOptions;
+
 /**
  * Options for connecting to a room.
  */
@@ -10,6 +12,7 @@ public class RoomOptions {
     private int reconnectAttempts = 5;
     private long reconnectDelayMs = 1000;
     private boolean e2eeEnabled = false;
+    private E2EEOptions e2eeOptions;
 
     public boolean isAutoSubscribe() {
         return autoSubscribe;
@@ -62,6 +65,16 @@ public class RoomOptions {
 
     public RoomOptions setE2eeEnabled(boolean e2eeEnabled) {
         this.e2eeEnabled = e2eeEnabled;
+        return this;
+    }
+
+    public E2EEOptions getE2eeOptions() {
+        return e2eeOptions;
+    }
+
+    public RoomOptions setE2eeOptions(E2EEOptions e2eeOptions) {
+        this.e2eeOptions = e2eeOptions;
+        this.e2eeEnabled = (e2eeOptions != null);
         return this;
     }
 }

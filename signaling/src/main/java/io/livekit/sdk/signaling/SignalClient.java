@@ -30,7 +30,6 @@ public class SignalClient {
     private WebSocketClient wsClient;
     private SignalState state = SignalState.DISCONNECTED;
     private String url;
-    private String token;
     private String participantSid;
     private ScheduledFuture<?> pingTask;
     private ScheduledFuture<?> pingTimeoutTask;
@@ -42,16 +41,39 @@ public class SignalClient {
     private ReconnectReason reconnectReason = ReconnectReason.UNKNOWN;
     private List<LivekitRtc.ICEServer> iceServers = new ArrayList<>();
     private LivekitRtc.SyncState pendingSyncState;
+    private ResumeTokenManager tokenManager;
+    private NetworkMonitor networkMonitor;
+    private final NetworkMonitor.Listener networkListener = new NetworkMonitor.Listener() {
+        @Override
+        public void onNetworkAvailable() {
+            if (state == SignalState.RECONNECTING || state == SignalState.FAILED) {
+                reconnectAttempts = 0;
+                reconnect(ReconnectReason.SIGNAL_DISCONNECTED, pendingSyncState);
+            }
+        }
+
+        @Override
+        public void onNetworkLost() {
+            if (state == SignalState.CONNECTED) {
+                handleConnectionFailure(ReconnectReason.SIGNAL_DISCONNECTED);
+            }
+        }
+    };
 
     public void connect(String url, String token) {
         if (state != SignalState.DISCONNECTED && state != SignalState.FAILED) {
             throw new IllegalStateException("Already connected or connecting");
         }
-        
+
         this.url = url;
-        this.token = token;
+        this.tokenManager = new ResumeTokenManager(token);
         this.isReconnecting = false;
-        
+
+        if (networkMonitor != null) {
+            networkMonitor.addListener(networkListener);
+            networkMonitor.start();
+        }
+
         doConnect();
     }
 
@@ -82,8 +104,9 @@ public class SignalClient {
         if (!isReconnecting) {
             setState(SignalState.CONNECTING);
         }
-        
+
         try {
+            String token = tokenManager != null ? tokenManager.getCurrentToken() : null;
             String wsUrl = buildWebSocketUrl(url, token, isReconnecting);
             wsClient = createWebSocketClient(new URI(wsUrl));
             wsClient.connect();
@@ -181,6 +204,9 @@ public class SignalClient {
             case JOIN:
                 LivekitRtc.JoinResponse joinResponse = response.getJoin();
                 participantSid = joinResponse.getParticipant().getSid();
+                if (tokenManager != null) {
+                    tokenManager.setParticipantSid(participantSid);
+                }
                 iceServers = new ArrayList<>(joinResponse.getIceServersList());
                 setState(SignalState.CONNECTED);
                 notifyJoinResponse(joinResponse);
@@ -224,7 +250,9 @@ public class SignalClient {
                 notifyStreamStateUpdate(response.getStreamStateUpdate());
                 break;
             case REFRESH_TOKEN:
-                token = response.getRefreshToken();
+                if (tokenManager != null) {
+                    tokenManager.updateToken(response.getRefreshToken());
+                }
                 notifyRefreshToken(response.getRefreshToken());
                 break;
             case RECONNECT:
@@ -253,12 +281,21 @@ public class SignalClient {
 
     public void disconnect() {
         stopPingPong();
-        
+
+        if (networkMonitor != null) {
+            networkMonitor.removeListener(networkListener);
+            networkMonitor.stop();
+        }
+
         if (wsClient != null) {
             wsClient.close();
             wsClient = null;
         }
-        
+
+        if (tokenManager != null) {
+            tokenManager.reset();
+        }
+
         setState(SignalState.DISCONNECTED);
     }
 
@@ -440,7 +477,15 @@ public class SignalClient {
     }
 
     public String getToken() {
-        return token;
+        return tokenManager != null ? tokenManager.getCurrentToken() : null;
+    }
+
+    public void setNetworkMonitor(NetworkMonitor monitor) {
+        this.networkMonitor = monitor;
+    }
+
+    public NetworkMonitor getNetworkMonitor() {
+        return networkMonitor;
     }
 
     // Listener management

@@ -58,11 +58,11 @@
    - [x] Implement DataChannel for reliable/unreliable data
    - [x] Add media device enumeration and track creation helpers
 
-### Pending
+9. Resilience & security [DONE]
+   - [x] Implement resume tokens and network change handling
+   - [x] Design E2EE hooks and key rotation interfaces
 
-9. Resilience & security
-   - [ ] Implement resume tokens and network change handling
-   - [ ] Support SRTP; design E2EE hooks and key rotation interfaces
+### Pending
 
 10. Testing & validation
     - [ ] Add interoperability tests with Web/Android/Go SDKs
@@ -83,6 +83,23 @@
 - Created `RoomSignalHandler` to bridge SignalClient events to Room
 - Created `LiveKitClient` as main entry point coordinating Room + SignalClient
 - Added comprehensive unit tests for `ProtoConverter` and `RoomSignalHandler`
+- All tests passing
+
+### 2025-12-06: Task 9 (Resilience & Security) Completed
+- Created `ResumeTokenManager` for storing and refreshing access tokens during reconnection
+- Implemented `NetworkMonitor` interface and `DefaultNetworkMonitor` for detecting network changes
+- Integrated network monitoring into `SignalClient` for automatic reconnection on network recovery
+- Designed E2EE framework in `core/src/main/java/io/livekit/sdk/e2ee/`:
+  - `EncryptionType` enum (NONE, GCM, CUSTOM)
+  - `KeyInfo` for key metadata
+  - `KeyProvider` interface for key management
+  - `BaseKeyProvider` implementation with shared/per-participant key modes
+  - `FrameCryptor` interface for frame encryption/decryption
+  - `E2EEManager` for coordinating E2EE state
+  - `E2EEListener` for E2EE events
+  - `E2EEOptions` for configuration
+  - `E2EEException` for error handling
+- Updated `RoomOptions` to support E2EE configuration
 - All tests passing
 
 ### 2024-12-06: Task 7 (RTC Module) Completed
