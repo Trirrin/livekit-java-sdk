@@ -7,13 +7,17 @@ public class LocalVideoTrack {
   private final String id;
   private final String name;
   private final VideoTrack nativeTrack;
+  private final int width;
+  private final int height;
   private String sid;
   private boolean muted;
 
-  public LocalVideoTrack(String id, String name, VideoTrack nativeTrack) {
+  public LocalVideoTrack(String id, String name, VideoTrack nativeTrack, int width, int height) {
     this.id = id;
     this.name = name;
     this.nativeTrack = nativeTrack;
+    this.width = width;
+    this.height = height;
     this.muted = false;
   }
 
@@ -35,6 +39,14 @@ public class LocalVideoTrack {
 
   public VideoTrack getNativeTrack() {
     return nativeTrack;
+  }
+
+  public int getWidth() {
+    return width;
+  }
+
+  public int getHeight() {
+    return height;
   }
 
   public boolean isMuted() {

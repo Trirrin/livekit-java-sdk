@@ -161,7 +161,7 @@ public class MediaDevicesHelper {
       String trackId = "video-" + UUID.randomUUID();
       VideoTrack nativeTrack = factory.createVideoTrack(trackId, videoSource);
 
-      return new LocalVideoTrack(trackId, name, nativeTrack);
+      return new LocalVideoTrack(trackId, name, nativeTrack, width, height);
     } catch (Exception e) {
       return null;
     }

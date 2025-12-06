@@ -78,6 +78,17 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
   /** Publish a local audio track. */
   public void publishAudioTrack(LocalAudioTrack track) {
     publishedAudioTrack = track;
+
+    // Send AddTrackRequest to server before adding to PeerConnection
+    LivekitRtc.AddTrackRequest addTrack =
+        LivekitRtc.AddTrackRequest.newBuilder()
+            .setCid(track.getId())
+            .setName(track.getName())
+            .setType(LivekitModels.TrackType.AUDIO)
+            .setSource(LivekitModels.TrackSource.MICROPHONE)
+            .build();
+    signalClient.sendAddTrack(addTrack);
+
     rtcEngine.addAudioTrack(track);
     hasPublishedTracks = true;
   }
@@ -85,6 +96,19 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
   /** Publish a local video track. */
   public void publishVideoTrack(LocalVideoTrack track) {
     publishedVideoTrack = track;
+
+    // Send AddTrackRequest to server before adding to PeerConnection
+    LivekitRtc.AddTrackRequest addTrack =
+        LivekitRtc.AddTrackRequest.newBuilder()
+            .setCid(track.getId())
+            .setName(track.getName())
+            .setType(LivekitModels.TrackType.VIDEO)
+            .setSource(LivekitModels.TrackSource.CAMERA)
+            .setWidth(track.getWidth())
+            .setHeight(track.getHeight())
+            .build();
+    signalClient.sendAddTrack(addTrack);
+
     rtcEngine.addVideoTrack(track);
     hasPublishedTracks = true;
   }
