@@ -107,9 +107,10 @@ public class MediaDevicesHelper {
 
       AudioOptions audioOptions = new AudioOptions();
       AudioTrackSource audioSource = factory.createAudioSource(audioOptions);
-      AudioTrack nativeTrack = factory.createAudioTrack("audio-" + UUID.randomUUID(), audioSource);
+      // Use same ID for native track and LocalAudioTrack so server cid matches
+      String trackId = "audio-" + UUID.randomUUID();
+      AudioTrack nativeTrack = factory.createAudioTrack(trackId, audioSource);
 
-      String trackId = UUID.randomUUID().toString();
       return new LocalAudioTrack(trackId, name, nativeTrack);
     } catch (Exception e) {
       return null;
@@ -156,9 +157,10 @@ public class MediaDevicesHelper {
       videoSource.setVideoCaptureCapability(capability);
       videoSource.start();
 
-      VideoTrack nativeTrack = factory.createVideoTrack("video-" + UUID.randomUUID(), videoSource);
+      // Use same ID for native track and LocalVideoTrack so server cid matches
+      String trackId = "video-" + UUID.randomUUID();
+      VideoTrack nativeTrack = factory.createVideoTrack(trackId, videoSource);
 
-      String trackId = UUID.randomUUID().toString();
       return new LocalVideoTrack(trackId, name, nativeTrack);
     } catch (Exception e) {
       return null;
