@@ -65,13 +65,24 @@
 ### Pending
 
 10. Testing & validation
-    - [ ] Add interoperability tests with Web/Android/Go SDKs
-    - [ ] Add CI targets: lint/format (spotless), protoc generation check
-    - [ ] Define sample apps for join/publish/subscribe
+    - [ ] Add interoperability tests with Web/Android/Go SDKs (requires live server)
 
-11. Packaging
-    - [ ] Gradle/Maven artifacts
-    - [ ] Documentation and examples
+11. Documentation
+    - [ ] Add comprehensive API documentation
+    - [ ] Create user guide
+
+### Completed (continued)
+
+10. Testing & validation [PARTIAL]
+    - [x] Add CI targets: lint/format (spotless), protoc generation check
+    - [x] Define sample apps for join/publish/subscribe (examples module)
+    - GitHub Actions CI workflow at `.github/workflows/ci.yml`
+
+11. Packaging [DONE]
+    - [x] Gradle/Maven artifacts configured
+    - [x] Source and Javadoc JARs generation
+    - [x] POM metadata for Maven Central publishing
+    - [x] Local Maven repository publishing support
 
 ---
 
@@ -122,3 +133,22 @@
 - Added `MediaDeviceInfo` for device metadata
 - Exposed convenience methods in RtcClient for audio/video device listing and track creation
 - All tests passing
+
+### 2025-12-06: Task 10 & 11 (CI, Examples, Packaging) Completed
+- Added Spotless plugin for code formatting (Google Java Format 1.22.0)
+- Created GitHub Actions CI workflow (`.github/workflows/ci.yml`):
+  - Spotless check for code formatting
+  - Protobuf generation verification
+  - Build and test execution
+  - Test report artifact upload on failure
+- Created `examples` module with 4 sample applications:
+  - `BasicRoomExample`: Join room and handle all events
+  - `PublishExample`: Publish audio/video tracks
+  - `SubscribeExample`: Subscribe to remote tracks
+  - `DataChannelExample`: Interactive data messaging
+- Configured Maven publishing for all library modules:
+  - Source and Javadoc JAR generation
+  - POM metadata for Maven Central compatibility
+  - Local Maven repository publishing
+  - Signing configuration (optional)
+- All tests passing, spotless check passing
