@@ -16,3 +16,4 @@ rootProject.name = "livekit-java-sdk"
 include(":protocol")
 include(":core")
 include(":signaling")
+include(":rtc")

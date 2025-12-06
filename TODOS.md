@@ -45,23 +45,31 @@
    - [x] Map protobuf messages to SDK types via `ProtoConverter`
    - [x] Implement participant/track synchronization (join, update, leave, track pub/unpub, mute)
 
+7. RTC module [DONE]
+   - [x] Chose `dev.onvoid.webrtc:webrtc-java:0.14.0` (libwebrtc m140 JNI bindings)
+   - [x] Created `rtc` module with PeerConnectionEngine
+   - [x] Implemented RtcEngine interface abstracting WebRTC operations
+   - [x] Created RtcClient coordinating Room + SignalClient + RtcEngine
+   - [x] Publisher/Subscriber dual PeerConnection architecture
+   - [x] ICE candidate exchange with JSON parsing
+
 ### Pending
 
-7. RTC/media stack selection
-   - [ ] Choose Java-accessible WebRTC implementation (libwebrtc JNI build vs alternative)
-   - [ ] Validate media/datachannel interoperability with official SDKs
-   - [ ] Plan audio processing (AEC/NS/AGC) and video encoding params
+8. RTC integration completion
+   - [ ] Wire remote track reception to Room subscriptions
+   - [ ] Implement DataChannel for reliable/unreliable data
+   - [ ] Add media device enumeration and track creation helpers
 
-8. Resilience & security
+9. Resilience & security
    - [ ] Implement resume tokens and network change handling
    - [ ] Support SRTP; design E2EE hooks and key rotation interfaces
 
-9. Testing & validation
-   - [ ] Add interoperability tests with Web/Android/Go SDKs
-   - [ ] Add CI targets: lint/format (spotless), protoc generation check
-   - [ ] Define sample apps for join/publish/subscribe
+10. Testing & validation
+    - [ ] Add interoperability tests with Web/Android/Go SDKs
+    - [ ] Add CI targets: lint/format (spotless), protoc generation check
+    - [ ] Define sample apps for join/publish/subscribe
 
-10. Packaging
+11. Packaging
     - [ ] Gradle/Maven artifacts
     - [ ] Documentation and examples
 
@@ -76,3 +84,12 @@
 - Created `LiveKitClient` as main entry point coordinating Room + SignalClient
 - Added comprehensive unit tests for `ProtoConverter` and `RoomSignalHandler`
 - All tests passing
+
+### 2024-12-06: Task 7 (RTC Module) Completed
+- Selected `dev.onvoid.webrtc:webrtc-java:0.14.0` (libwebrtc m140, same approach as Android SDK)
+- Created `rtc` module with WebRTC integration
+- Implemented `RtcEngine` interface and `PeerConnectionEngine` implementation
+- Dual PeerConnection architecture: Publisher (send) + Subscriber (receive)
+- Created `RtcClient` coordinating Room + SignalClient + RtcEngine
+- ICE candidate JSON parsing with `IceCandidateParser`
+- Unit tests for ICE parsing and configuration
