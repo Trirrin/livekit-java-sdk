@@ -32,11 +32,15 @@
 
 ### In Progress
 
-5. Protocol & signaling
+5. Protocol & signaling [DONE]
    - [x] Import livekit/protocol protobufs and generate Java classes.
    - [x] Implement WebSocket signaling: join/offer/answer/track updates/ping-pong/room state, token parsing.
    - [x] Design state machine: Disconnected → Connecting → Connected → Reconnecting → Failing with resume/backoff.
-   - [ ] Handle ICE restart triggers and track publication/subscription sync after resume.
+   - [x] Handle ICE restart triggers and track publication/subscription sync after resume.
+     - Added `ReconnectReason` enum for tracking reconnection causes
+     - Implemented `SyncStateBuilder` for constructing client state sync messages
+     - Enhanced `SignalClient` with ICE server management and restart triggers
+     - Added `onIceServersUpdated` and `onIceRestartRequired` listener callbacks
 
 ### Pending
 

@@ -2,6 +2,8 @@ package io.livekit.sdk.signaling;
 
 import livekit.LivekitRtc;
 
+import java.util.List;
+
 /**
  * Listener interface for signaling events.
  */
@@ -42,4 +44,15 @@ public interface SignalListener {
     void onPong(long timestamp);
     
     void onError(Exception e);
+
+    /**
+     * Called when ICE servers are updated (from JoinResponse or ReconnectResponse).
+     * RTC layer should use these servers for ICE restart.
+     */
+    default void onIceServersUpdated(List<LivekitRtc.ICEServer> iceServers) {}
+
+    /**
+     * Called when an ICE restart should be triggered due to connection issues.
+     */
+    default void onIceRestartRequired(ReconnectReason reason) {}
 }

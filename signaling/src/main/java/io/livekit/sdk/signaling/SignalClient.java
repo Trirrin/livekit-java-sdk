@@ -1,17 +1,20 @@
 package io.livekit.sdk.signaling;
 
+import livekit.LivekitModels;
 import livekit.LivekitRtc;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.List;
 
 /**
  * WebSocket client for LiveKit signaling protocol.
@@ -28,6 +31,7 @@ public class SignalClient {
     private SignalState state = SignalState.DISCONNECTED;
     private String url;
     private String token;
+    private String participantSid;
     private ScheduledFuture<?> pingTask;
     private ScheduledFuture<?> pingTimeoutTask;
     private long lastPongTimestamp;
@@ -35,6 +39,9 @@ public class SignalClient {
     private int maxReconnectAttempts = 5;
     private long reconnectDelayMs = 1000;
     private boolean isReconnecting = false;
+    private ReconnectReason reconnectReason = ReconnectReason.UNKNOWN;
+    private List<LivekitRtc.ICEServer> iceServers = new ArrayList<>();
+    private LivekitRtc.SyncState pendingSyncState;
 
     public void connect(String url, String token) {
         if (state != SignalState.DISCONNECTED && state != SignalState.FAILED) {
@@ -49,13 +56,26 @@ public class SignalClient {
     }
 
     public void reconnect() {
+        reconnect(ReconnectReason.SIGNAL_DISCONNECTED, null);
+    }
+
+    public void reconnect(ReconnectReason reason, LivekitRtc.SyncState syncState) {
         if (state == SignalState.RECONNECTING) {
             return;
         }
         
         this.isReconnecting = true;
+        this.reconnectReason = reason;
+        this.pendingSyncState = syncState;
         setState(SignalState.RECONNECTING);
         doConnect();
+    }
+
+    public void triggerIceRestart(ReconnectReason reason) {
+        if (state != SignalState.CONNECTED) {
+            return;
+        }
+        reconnect(reason, pendingSyncState);
     }
 
     private void doConnect() {
@@ -92,6 +112,12 @@ public class SignalClient {
         
         if (reconnect) {
             wsUrl += "&reconnect=1";
+            if (participantSid != null) {
+                wsUrl += "&sid=" + participantSid;
+            }
+            if (reconnectReason != null && reconnectReason != ReconnectReason.UNKNOWN) {
+                wsUrl += "&reconnect_reason=" + reconnectReason.toProto().getNumber();
+            }
         }
         
         return wsUrl;
@@ -103,7 +129,11 @@ public class SignalClient {
             public void onOpen(ServerHandshake handshake) {
                 reconnectAttempts = 0;
                 startPingPong();
-                // State will be updated when JoinResponse is received
+                
+                // Send SyncState on reconnection to sync track state with server
+                if (isReconnecting && pendingSyncState != null) {
+                    sendSyncState(pendingSyncState);
+                }
             }
 
             @Override
@@ -149,12 +179,12 @@ public class SignalClient {
     private void processSignalResponse(LivekitRtc.SignalResponse response) {
         switch (response.getMessageCase()) {
             case JOIN:
-                if (isReconnecting) {
-                    setState(SignalState.CONNECTED);
-                } else {
-                    setState(SignalState.CONNECTED);
-                }
-                notifyJoinResponse(response.getJoin());
+                LivekitRtc.JoinResponse joinResponse = response.getJoin();
+                participantSid = joinResponse.getParticipant().getSid();
+                iceServers = new ArrayList<>(joinResponse.getIceServersList());
+                setState(SignalState.CONNECTED);
+                notifyJoinResponse(joinResponse);
+                notifyIceServersUpdated(iceServers);
                 break;
             case ANSWER:
                 notifyAnswer(response.getAnswer());
@@ -198,7 +228,14 @@ public class SignalClient {
                 notifyRefreshToken(response.getRefreshToken());
                 break;
             case RECONNECT:
-                notifyReconnectResponse(response.getReconnect());
+                LivekitRtc.ReconnectResponse reconnectResponse = response.getReconnect();
+                // Update ICE servers from reconnect response
+                if (reconnectResponse.getIceServersCount() > 0) {
+                    iceServers = new ArrayList<>(reconnectResponse.getIceServersList());
+                    notifyIceServersUpdated(iceServers);
+                }
+                setState(SignalState.CONNECTED);
+                notifyReconnectResponse(reconnectResponse);
                 break;
             case PONG:
                 lastPongTimestamp = System.currentTimeMillis();
@@ -226,15 +263,25 @@ public class SignalClient {
     }
 
     private void handleConnectionFailure() {
+        handleConnectionFailure(ReconnectReason.SIGNAL_DISCONNECTED);
+    }
+
+    private void handleConnectionFailure(ReconnectReason reason) {
         if (reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++;
+            this.reconnectReason = reason;
             setState(SignalState.RECONNECTING);
+            notifyIceRestartRequired(reason);
             
             long delay = reconnectDelayMs * (1L << Math.min(reconnectAttempts - 1, 5));
-            scheduler.schedule(this::reconnect, delay, TimeUnit.MILLISECONDS);
+            scheduler.schedule(() -> reconnect(reason, pendingSyncState), delay, TimeUnit.MILLISECONDS);
         } else {
             setState(SignalState.FAILED);
         }
+    }
+
+    public void requestIceRestart(ReconnectReason reason) {
+        handleConnectionFailure(reason);
     }
 
     private void startPingPong() {
@@ -376,6 +423,26 @@ public class SignalClient {
         this.reconnectDelayMs = reconnectDelayMs;
     }
 
+    public String getParticipantSid() {
+        return participantSid;
+    }
+
+    public List<LivekitRtc.ICEServer> getIceServers() {
+        return Collections.unmodifiableList(iceServers);
+    }
+
+    public void setPendingSyncState(LivekitRtc.SyncState syncState) {
+        this.pendingSyncState = syncState;
+    }
+
+    public LivekitRtc.SyncState getPendingSyncState() {
+        return pendingSyncState;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
     // Listener management
     public void addListener(SignalListener listener) {
         listeners.add(listener);
@@ -491,6 +558,18 @@ public class SignalClient {
     private void notifyError(Exception e) {
         for (SignalListener listener : listeners) {
             listener.onError(e);
+        }
+    }
+
+    private void notifyIceServersUpdated(List<LivekitRtc.ICEServer> servers) {
+        for (SignalListener listener : listeners) {
+            listener.onIceServersUpdated(servers);
+        }
+    }
+
+    private void notifyIceRestartRequired(ReconnectReason reason) {
+        for (SignalListener listener : listeners) {
+            listener.onIceRestartRequired(reason);
         }
     }
 
