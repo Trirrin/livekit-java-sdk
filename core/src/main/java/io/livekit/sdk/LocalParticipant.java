@@ -6,10 +6,21 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Represents the local participant (current user) in the room. */
 public class LocalParticipant extends Participant {
   private final Map<String, TrackPublication> localTrackPublications;
+  private LocalTrackManager trackManager;
 
   public LocalParticipant(String sid, String identity) {
     super(sid, identity);
     this.localTrackPublications = new ConcurrentHashMap<>();
+  }
+
+  /** Set the track manager for controlling local media tracks. */
+  public void setTrackManager(LocalTrackManager trackManager) {
+    this.trackManager = trackManager;
+  }
+
+  /** Get the track manager. */
+  public LocalTrackManager getTrackManager() {
+    return trackManager;
   }
 
   /**
@@ -27,17 +38,38 @@ public class LocalParticipant extends Participant {
 
   /** Set microphone enabled state. */
   public void setMicrophoneEnabled(boolean enabled) {
-    // Will be implemented with RTC transport
+    if (trackManager != null) {
+      trackManager.setMicrophoneEnabled(enabled);
+    }
   }
 
   /** Set camera enabled state. */
   public void setCameraEnabled(boolean enabled) {
-    // Will be implemented with RTC transport
+    if (trackManager != null) {
+      trackManager.setCameraEnabled(enabled);
+    }
   }
 
   /** Set screen share enabled state. */
   public void setScreenShareEnabled(boolean enabled) {
-    // Will be implemented with RTC transport
+    if (trackManager != null) {
+      trackManager.setScreenShareEnabled(enabled);
+    }
+  }
+
+  /** Check if microphone is enabled. */
+  public boolean isMicrophoneEnabled() {
+    return trackManager != null && trackManager.isMicrophoneEnabled();
+  }
+
+  /** Check if camera is enabled. */
+  public boolean isCameraEnabled() {
+    return trackManager != null && trackManager.isCameraEnabled();
+  }
+
+  /** Check if screen share is enabled. */
+  public boolean isScreenShareEnabled() {
+    return trackManager != null && trackManager.isScreenShareEnabled();
   }
 
   /** Update participant metadata. */

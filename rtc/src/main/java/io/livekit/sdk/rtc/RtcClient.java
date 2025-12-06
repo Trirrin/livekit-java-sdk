@@ -6,6 +6,8 @@ import dev.onvoid.webrtc.RTCRtpTransceiver;
 import dev.onvoid.webrtc.RTCSdpType;
 import dev.onvoid.webrtc.RTCSessionDescription;
 import dev.onvoid.webrtc.media.MediaStreamTrack;
+import io.livekit.sdk.LocalParticipant;
+import io.livekit.sdk.LocalTrackManager;
 import io.livekit.sdk.Room;
 import io.livekit.sdk.RoomOptions;
 import io.livekit.sdk.RoomSignalHandler;
@@ -26,7 +28,7 @@ import livekit.LivekitRtc;
  * Main client that coordinates Room, SignalClient, and RtcEngine. This is the primary entry point
  * for connecting to a LiveKit room with full media support.
  */
-public class RtcClient implements SignalListener, RtcEngineListener {
+public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackManager {
 
   private final Room room;
   private final SignalClient signalClient;
@@ -37,6 +39,9 @@ public class RtcClient implements SignalListener, RtcEngineListener {
   private final Map<String, String> midToTrackSid = new ConcurrentHashMap<>();
   // Maps track SID to the subscribed track
   private final Map<String, Track> subscribedTracks = new ConcurrentHashMap<>();
+  // Published local tracks
+  private LocalAudioTrack publishedAudioTrack;
+  private LocalVideoTrack publishedVideoTrack;
 
   private CompletableFuture<Room> connectFuture;
   private boolean hasPublishedTracks = false;
@@ -72,18 +77,26 @@ public class RtcClient implements SignalListener, RtcEngineListener {
 
   /** Publish a local audio track. */
   public void publishAudioTrack(LocalAudioTrack track) {
+    publishedAudioTrack = track;
     rtcEngine.addAudioTrack(track);
     hasPublishedTracks = true;
   }
 
   /** Publish a local video track. */
   public void publishVideoTrack(LocalVideoTrack track) {
+    publishedVideoTrack = track;
     rtcEngine.addVideoTrack(track);
     hasPublishedTracks = true;
   }
 
   /** Unpublish a track. */
   public void unpublishTrack(String trackId) {
+    if (publishedAudioTrack != null && publishedAudioTrack.getId().equals(trackId)) {
+      publishedAudioTrack = null;
+    }
+    if (publishedVideoTrack != null && publishedVideoTrack.getId().equals(trackId)) {
+      publishedVideoTrack = null;
+    }
     rtcEngine.removeTrack(trackId);
   }
 
@@ -191,6 +204,12 @@ public class RtcClient implements SignalListener, RtcEngineListener {
     rtcEngine.initialize(iceServers);
 
     signalHandler.onJoinResponse(response);
+
+    // Register this client as the track manager for the local participant
+    LocalParticipant localParticipant = room.getLocalParticipant();
+    if (localParticipant != null) {
+      localParticipant.setTrackManager(this);
+    }
 
     if (connectFuture != null && !connectFuture.isDone()) {
       connectFuture.complete(room);
@@ -503,5 +522,42 @@ public class RtcClient implements SignalListener, RtcEngineListener {
       configs.add(config);
     }
     return configs;
+  }
+
+  // LocalTrackManager implementation
+
+  @Override
+  public void setMicrophoneEnabled(boolean enabled) {
+    if (publishedAudioTrack != null) {
+      publishedAudioTrack.setMuted(!enabled);
+    }
+  }
+
+  @Override
+  public void setCameraEnabled(boolean enabled) {
+    if (publishedVideoTrack != null) {
+      publishedVideoTrack.setMuted(!enabled);
+    }
+  }
+
+  @Override
+  public void setScreenShareEnabled(boolean enabled) {
+    // Screen share is not yet implemented - tracked in TODOS.md
+  }
+
+  @Override
+  public boolean isMicrophoneEnabled() {
+    return publishedAudioTrack != null && !publishedAudioTrack.isMuted();
+  }
+
+  @Override
+  public boolean isCameraEnabled() {
+    return publishedVideoTrack != null && !publishedVideoTrack.isMuted();
+  }
+
+  @Override
+  public boolean isScreenShareEnabled() {
+    // Screen share is not yet implemented
+    return false;
   }
 }
