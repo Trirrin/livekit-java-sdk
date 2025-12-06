@@ -7,8 +7,8 @@ plugins {
 }
 
 allprojects {
-    group = "io.livekit"
-    version = "0.1.0-SNAPSHOT"
+    group = "com.github.Trirrin.livekit-java-sdk"
+    version = project.findProperty("version")?.toString()?.removePrefix("v") ?: "0.1.0-SNAPSHOT"
 }
 
 subprojects {
@@ -94,8 +94,8 @@ subprojects {
         }
 
         configure<SigningExtension> {
-            // Only sign if credentials are available
-            setRequired({ gradle.taskGraph.hasTask("publish") })
+            // Only sign if credentials are available (skip on JitPack)
+            setRequired({ gradle.taskGraph.hasTask("publish") && !System.getenv("JITPACK").toBoolean() })
             val publishing = extensions.getByType<PublishingExtension>()
             sign(publishing.publications["maven"])
         }
