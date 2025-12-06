@@ -284,6 +284,17 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
   @Override
   public void onTrackPublished(LivekitRtc.TrackPublishedResponse response) {
+    String cid = response.getCid();
+    String sid = response.getTrack().getSid();
+
+    // Store SID in local track for mute signaling
+    if (publishedAudioTrack != null && publishedAudioTrack.getId().equals(cid)) {
+      publishedAudioTrack.setSid(sid);
+    }
+    if (publishedVideoTrack != null && publishedVideoTrack.getId().equals(cid)) {
+      publishedVideoTrack.setSid(sid);
+    }
+
     signalHandler.onTrackPublished(response);
   }
 
@@ -294,12 +305,34 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
   @Override
   public void onLeave(LivekitRtc.LeaveRequest leave) {
+    // Clean up local tracks
+    if (publishedAudioTrack != null) {
+      publishedAudioTrack.dispose();
+      publishedAudioTrack = null;
+    }
+    if (publishedVideoTrack != null) {
+      publishedVideoTrack.dispose();
+      publishedVideoTrack = null;
+    }
+
     rtcEngine.close();
+    signalClient.disconnect();
     signalHandler.onLeave(leave);
   }
 
   @Override
   public void onMuteTrack(LivekitRtc.MuteTrackRequest mute) {
+    String sid = mute.getSid();
+    boolean muted = mute.getMuted();
+
+    // Apply mute state to local track
+    if (publishedAudioTrack != null && sid.equals(publishedAudioTrack.getSid())) {
+      publishedAudioTrack.setMuted(muted);
+    }
+    if (publishedVideoTrack != null && sid.equals(publishedVideoTrack.getSid())) {
+      publishedVideoTrack.setMuted(muted);
+    }
+
     signalHandler.onMuteTrack(mute);
   }
 
@@ -529,14 +562,32 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
   @Override
   public void setMicrophoneEnabled(boolean enabled) {
     if (publishedAudioTrack != null) {
-      publishedAudioTrack.setMuted(!enabled);
+      boolean muted = !enabled;
+      publishedAudioTrack.setMuted(muted);
+
+      // Send mute state to server
+      String sid = publishedAudioTrack.getSid();
+      if (sid != null) {
+        LivekitRtc.MuteTrackRequest muteRequest =
+            LivekitRtc.MuteTrackRequest.newBuilder().setSid(sid).setMuted(muted).build();
+        signalClient.sendMuteTrack(muteRequest);
+      }
     }
   }
 
   @Override
   public void setCameraEnabled(boolean enabled) {
     if (publishedVideoTrack != null) {
-      publishedVideoTrack.setMuted(!enabled);
+      boolean muted = !enabled;
+      publishedVideoTrack.setMuted(muted);
+
+      // Send mute state to server
+      String sid = publishedVideoTrack.getSid();
+      if (sid != null) {
+        LivekitRtc.MuteTrackRequest muteRequest =
+            LivekitRtc.MuteTrackRequest.newBuilder().setSid(sid).setMuted(muted).build();
+        signalClient.sendMuteTrack(muteRequest);
+      }
     }
   }
 

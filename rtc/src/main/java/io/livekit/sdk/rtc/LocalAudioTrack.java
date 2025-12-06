@@ -7,6 +7,7 @@ public class LocalAudioTrack {
   private final String id;
   private final String name;
   private final AudioTrack nativeTrack;
+  private String sid;
   private boolean muted;
 
   public LocalAudioTrack(String id, String name, AudioTrack nativeTrack) {
@@ -22,6 +23,14 @@ public class LocalAudioTrack {
 
   public String getName() {
     return name;
+  }
+
+  public String getSid() {
+    return sid;
+  }
+
+  public void setSid(String sid) {
+    this.sid = sid;
   }
 
   public AudioTrack getNativeTrack() {

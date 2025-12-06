@@ -7,6 +7,7 @@ public class LocalVideoTrack {
   private final String id;
   private final String name;
   private final VideoTrack nativeTrack;
+  private String sid;
   private boolean muted;
 
   public LocalVideoTrack(String id, String name, VideoTrack nativeTrack) {
@@ -22,6 +23,14 @@ public class LocalVideoTrack {
 
   public String getName() {
     return name;
+  }
+
+  public String getSid() {
+    return sid;
+  }
+
+  public void setSid(String sid) {
+    this.sid = sid;
   }
 
   public VideoTrack getNativeTrack() {
