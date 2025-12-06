@@ -1,19 +1,29 @@
 package io.livekit.sdk.e2ee;
 
-/** Configuration options for E2EE. */
+/** Configuration options for E2EE. Based on LiveKit Android SDK's E2EEOptions. */
 public class E2EEOptions {
   private final EncryptionType encryptionType;
   private final KeyProvider keyProvider;
-  private final int ratchetWindowSize;
-  private final int ratchetSalt;
-  private final boolean failureTolerance;
 
-  private E2EEOptions(Builder builder) {
-    this.encryptionType = builder.encryptionType;
-    this.keyProvider = builder.keyProvider;
-    this.ratchetWindowSize = builder.ratchetWindowSize;
-    this.ratchetSalt = builder.ratchetSalt;
-    this.failureTolerance = builder.failureTolerance;
+  /** Create E2EE options with default BaseKeyProvider in shared key mode. */
+  public E2EEOptions() {
+    this(EncryptionType.GCM, new BaseKeyProvider(true));
+  }
+
+  /** Create E2EE options with specified encryption type and default key provider. */
+  public E2EEOptions(EncryptionType encryptionType) {
+    this(encryptionType, new BaseKeyProvider(true));
+  }
+
+  /** Create E2EE options with specified key provider. */
+  public E2EEOptions(KeyProvider keyProvider) {
+    this(EncryptionType.GCM, keyProvider);
+  }
+
+  /** Create E2EE options with specified encryption type and key provider. */
+  public E2EEOptions(EncryptionType encryptionType, KeyProvider keyProvider) {
+    this.encryptionType = encryptionType;
+    this.keyProvider = keyProvider;
   }
 
   public EncryptionType getEncryptionType() {
@@ -24,18 +34,6 @@ public class E2EEOptions {
     return keyProvider;
   }
 
-  public int getRatchetWindowSize() {
-    return ratchetWindowSize;
-  }
-
-  public int getRatchetSalt() {
-    return ratchetSalt;
-  }
-
-  public boolean isFailureTolerance() {
-    return failureTolerance;
-  }
-
   public static Builder builder() {
     return new Builder();
   }
@@ -43,9 +41,9 @@ public class E2EEOptions {
   public static class Builder {
     private EncryptionType encryptionType = EncryptionType.GCM;
     private KeyProvider keyProvider;
-    private int ratchetWindowSize = 16;
-    private int ratchetSalt = 0;
-    private boolean failureTolerance = false;
+    private String ratchetSalt = BaseKeyProvider.DEFAULT_RATCHET_SALT;
+    private int ratchetWindowSize = BaseKeyProvider.DEFAULT_RATCHET_WINDOW_SIZE;
+    private boolean sharedKeyMode = true;
 
     public Builder encryptionType(EncryptionType type) {
       this.encryptionType = type;
@@ -57,26 +55,26 @@ public class E2EEOptions {
       return this;
     }
 
+    public Builder ratchetSalt(String salt) {
+      this.ratchetSalt = salt;
+      return this;
+    }
+
     public Builder ratchetWindowSize(int size) {
       this.ratchetWindowSize = size;
       return this;
     }
 
-    public Builder ratchetSalt(int salt) {
-      this.ratchetSalt = salt;
-      return this;
-    }
-
-    public Builder failureTolerance(boolean tolerance) {
-      this.failureTolerance = tolerance;
+    public Builder sharedKeyMode(boolean sharedKey) {
+      this.sharedKeyMode = sharedKey;
       return this;
     }
 
     public E2EEOptions build() {
       if (keyProvider == null) {
-        throw new IllegalStateException("KeyProvider is required");
+        keyProvider = new BaseKeyProvider(sharedKeyMode, ratchetSalt, ratchetWindowSize);
       }
-      return new E2EEOptions(this);
+      return new E2EEOptions(encryptionType, keyProvider);
     }
   }
 }

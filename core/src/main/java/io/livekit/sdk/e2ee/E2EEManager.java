@@ -4,17 +4,25 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Manages E2EE state and coordinates encryption/decryption for a room. This is the main entry point
- * for E2EE functionality.
+ * Manages E2EE state and coordinates encryption/decryption for a room. Based on LiveKit Android
+ * SDK's E2EEManager.
+ *
+ * <p>Note: Media track E2EE requires WebRTC FrameCryptor support which is not available in
+ * webrtc-java. This manager currently supports DataChannel E2EE only.
  */
 public class E2EEManager {
   private final E2EEOptions options;
   private final List<E2EEListener> listeners = new CopyOnWriteArrayList<>();
+  private final DataPacketCryptor dataPacketCryptor;
   private boolean enabled;
+  private boolean dataChannelEncryptionEnabled;
+  private String localIdentity;
 
   public E2EEManager(E2EEOptions options) {
     this.options = options;
     this.enabled = true;
+    this.dataChannelEncryptionEnabled = false;
+    this.dataPacketCryptor = new DataPacketCryptor(options.getKeyProvider());
   }
 
   public E2EEOptions getOptions() {
@@ -31,22 +39,56 @@ public class E2EEManager {
 
   public void setEnabled(boolean enabled) {
     this.enabled = enabled;
+    this.dataPacketCryptor.setEnabled(enabled);
     notifyStateChanged(enabled);
   }
 
   /**
-   * Set the encryption key for the local participant.
+   * @return true if data channel encryption is enabled for outgoing messages
+   */
+  public boolean isDataChannelEncryptionEnabled() {
+    return enabled && dataChannelEncryptionEnabled;
+  }
+
+  /** Enable or disable data channel encryption for outgoing messages. */
+  public void setDataChannelEncryptionEnabled(boolean enabled) {
+    this.dataChannelEncryptionEnabled = enabled;
+  }
+
+  /** Set the local participant's identity for key management. */
+  public void setLocalIdentity(String identity) {
+    this.localIdentity = identity;
+    KeyProvider keyProvider = options.getKeyProvider();
+    if (keyProvider instanceof BaseKeyProvider) {
+      ((BaseKeyProvider) keyProvider).setLocalIdentity(identity);
+    }
+  }
+
+  /**
+   * Set the shared encryption key for all participants.
    *
-   * @param key the raw key bytes
+   * @param key the raw key bytes (should be 32 bytes for AES-256)
    * @param keyIndex the key index (for key rotation)
    */
-  public void setKey(byte[] key, int keyIndex) {
+  public void setSharedKey(byte[] key, int keyIndex) {
     options.getKeyProvider().setSharedKey(key, keyIndex);
     notifyKeySet(keyIndex);
   }
 
   /**
-   * Rotate to a new encryption key. The new key will be used for encrypting outgoing frames.
+   * Set an encryption key for a specific participant.
+   *
+   * @param key the raw key bytes
+   * @param keyIndex the key index
+   * @param participantIdentity the participant's identity
+   */
+  public void setKey(byte[] key, int keyIndex, String participantIdentity) {
+    options.getKeyProvider().setKey(key, keyIndex, participantIdentity);
+    notifyKeySet(keyIndex);
+  }
+
+  /**
+   * Rotate to a new encryption key using key ratcheting.
    *
    * @return the new key info
    */
@@ -57,13 +99,49 @@ public class E2EEManager {
   }
 
   /**
-   * Ratchet the key for a participant. Used when receiving frames encrypted with a newer key index.
+   * Ratchet the shared key to derive a new key.
    *
-   * @param participantIdentity the participant's identity
-   * @param keyIndex the new key index
+   * @return the new derived key bytes
    */
-  public void ratchetKey(String participantIdentity, int keyIndex) {
-    notifyKeyRatcheted(participantIdentity, keyIndex);
+  public byte[] ratchetSharedKey() {
+    KeyProvider keyProvider = options.getKeyProvider();
+    int currentIndex = keyProvider.getLatestKeyIndex("shared");
+    byte[] newKey = keyProvider.ratchetSharedKey(currentIndex);
+    if (newKey != null) {
+      notifyKeyRatcheted("shared", currentIndex + 1);
+    }
+    return newKey;
+  }
+
+  /**
+   * Encrypt a data packet for transmission.
+   *
+   * @param payload the plaintext payload
+   * @return encrypted packet, or null if encryption is disabled or fails
+   */
+  public EncryptedPacket encrypt(byte[] payload) {
+    if (!isDataChannelEncryptionEnabled()) {
+      return null;
+    }
+    String identity = localIdentity != null ? localIdentity : "local";
+    int keyIndex = options.getKeyProvider().getLatestKeyIndex(identity);
+    return dataPacketCryptor.encrypt(identity, keyIndex, payload);
+  }
+
+  /**
+   * Decrypt a received data packet.
+   *
+   * @param participantIdentity the sender's identity
+   * @param packet the encrypted packet
+   * @return decrypted payload, or null if decryption fails
+   */
+  public byte[] decrypt(String participantIdentity, EncryptedPacket packet) {
+    byte[] result = dataPacketCryptor.decrypt(participantIdentity, packet);
+    if (result == null) {
+      notifyEncryptionError(
+          participantIdentity, new E2EEException("Decryption failed for " + participantIdentity));
+    }
+    return result;
   }
 
   public void addListener(E2EEListener listener) {
@@ -72,6 +150,11 @@ public class E2EEManager {
 
   public void removeListener(E2EEListener listener) {
     listeners.remove(listener);
+  }
+
+  /** Clean up resources when leaving a room. */
+  public void cleanup() {
+    // No native resources to clean up in pure Java implementation
   }
 
   private void notifyStateChanged(boolean enabled) {

@@ -2,7 +2,7 @@ package io.livekit.sdk.e2ee;
 
 /**
  * Interface for providing encryption keys for E2EE. Implementations handle key storage, derivation,
- * and rotation.
+ * and rotation. Based on LiveKit Android SDK's KeyProvider interface.
  */
 public interface KeyProvider {
 
@@ -56,12 +56,45 @@ public interface KeyProvider {
   void setSharedKey(byte[] key, int keyIndex);
 
   /**
+   * Ratchet the shared key to derive a new key from the current one.
+   *
+   * @param keyIndex the key index to ratchet
+   * @return the new derived key bytes
+   */
+  byte[] ratchetSharedKey(int keyIndex);
+
+  /**
+   * Ratchet a participant's key to derive a new key.
+   *
+   * @param participantIdentity the participant's identity
+   * @param keyIndex the key index to ratchet
+   * @return the new derived key bytes
+   */
+  byte[] ratchetKey(String participantIdentity, int keyIndex);
+
+  /**
    * Export the current key in a format suitable for sharing.
    *
    * @param participantIdentity the participant's identity
    * @return the exported key bytes
    */
   byte[] exportKey(String participantIdentity);
+
+  /**
+   * Export the shared key.
+   *
+   * @param keyIndex the key index
+   * @return the exported key bytes
+   */
+  byte[] exportSharedKey(int keyIndex);
+
+  /**
+   * Get the latest key index for a participant.
+   *
+   * @param participantIdentity the participant's identity
+   * @return the latest key index
+   */
+  int getLatestKeyIndex(String participantIdentity);
 
   /**
    * Clear all keys for a participant.
@@ -72,4 +105,9 @@ public interface KeyProvider {
 
   /** Clear all stored keys. */
   void clearAllKeys();
+
+  /**
+   * @return true if using shared key mode for all participants
+   */
+  boolean isSharedKeyMode();
 }
