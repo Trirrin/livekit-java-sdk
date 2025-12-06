@@ -53,12 +53,12 @@
    - [x] Publisher/Subscriber dual PeerConnection architecture
    - [x] ICE candidate exchange with JSON parsing
 
-### Pending
+8. RTC integration completion [DONE]
+   - [x] Wire remote track reception to Room subscriptions
+   - [x] Implement DataChannel for reliable/unreliable data
+   - [x] Add media device enumeration and track creation helpers
 
-8. RTC integration completion
-   - [ ] Wire remote track reception to Room subscriptions
-   - [ ] Implement DataChannel for reliable/unreliable data
-   - [ ] Add media device enumeration and track creation helpers
+### Pending
 
 9. Resilience & security
    - [ ] Implement resume tokens and network change handling
@@ -93,3 +93,15 @@
 - Created `RtcClient` coordinating Room + SignalClient + RtcEngine
 - ICE candidate JSON parsing with `IceCandidateParser`
 - Unit tests for ICE parsing and configuration
+
+### 2024-12-06: Task 8 (RTC Integration Completion) Completed
+- Wired remote track reception to Room subscriptions via `mid_to_track_id` mapping
+- Created `RemoteAudioTrack` and `RemoteVideoTrack` wrappers with native track access
+- Added `TrackSubscriptionHandler` interface for Room to receive track events
+- Implemented `DataChannelManager` for reliable/lossy data transport
+- Created dual data channels on publisher connection (_reliable and _lossy)
+- Added protobuf DataPacket serialization/deserialization in RtcClient
+- Created `MediaDevicesHelper` for device enumeration and track creation
+- Added `MediaDeviceInfo` for device metadata
+- Exposed convenience methods in RtcClient for audio/video device listing and track creation
+- All tests passing

@@ -14,7 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Represents a LiveKit room.
  * This is the main entry point for interacting with a LiveKit room.
  */
-public class Room {
+public class Room implements TrackSubscriptionHandler {
     private String sid;
     private String name;
     private String metadata;
@@ -450,5 +450,49 @@ public class Room {
         for (RoomListener listener : listeners) {
             listener.onRoomMetadataChanged(this, metadata);
         }
+    }
+
+    // TrackSubscriptionHandler implementation
+
+    @Override
+    public void onTrackSubscribed(String trackSid, Track track) {
+        // Find the publication and participant for this track
+        for (RemoteParticipant participant : remoteParticipants.values()) {
+            TrackPublication pub = participant.getTrackPublication(trackSid);
+            if (pub != null) {
+                pub.setTrack(track);
+                pub.setSubscribed(true);
+                notifyTrackSubscribed(track, pub, participant);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void onTrackUnsubscribed(String trackSid, Track track) {
+        // Find the publication and participant for this track
+        for (RemoteParticipant participant : remoteParticipants.values()) {
+            TrackPublication pub = participant.getTrackPublication(trackSid);
+            if (pub != null && pub.getTrack() == track) {
+                pub.setTrack(null);
+                pub.setSubscribed(false);
+                notifyTrackUnsubscribed(track, pub, participant);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void onDataReceived(byte[] data, DataPacket.Kind kind, String participantSid, String topic) {
+        RemoteParticipant sender = null;
+        if (participantSid != null) {
+            for (RemoteParticipant p : remoteParticipants.values()) {
+                if (p.getSid().equals(participantSid)) {
+                    sender = p;
+                    break;
+                }
+            }
+        }
+        notifyDataReceived(data, sender, kind, topic);
     }
 }

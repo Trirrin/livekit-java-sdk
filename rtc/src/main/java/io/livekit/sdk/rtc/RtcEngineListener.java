@@ -2,6 +2,7 @@ package io.livekit.sdk.rtc;
 
 import dev.onvoid.webrtc.RTCIceCandidate;
 import dev.onvoid.webrtc.RTCIceConnectionState;
+import dev.onvoid.webrtc.RTCRtpTransceiver;
 import dev.onvoid.webrtc.media.MediaStreamTrack;
 
 /**
@@ -26,8 +27,11 @@ public interface RtcEngineListener {
 
     /**
      * Called when a remote track is received from subscriber connection.
+     * @param track The received media track
+     * @param transceiver The transceiver containing the track (used to get mid)
+     * @param streamIds Stream IDs associated with the track
      */
-    void onRemoteTrackReceived(MediaStreamTrack track, String[] streamIds);
+    void onRemoteTrackReceived(MediaStreamTrack track, RTCRtpTransceiver transceiver, String[] streamIds);
 
     /**
      * Called when a remote track is removed.
@@ -36,6 +40,8 @@ public interface RtcEngineListener {
 
     /**
      * Called when a data channel message is received.
+     * @param data The received data
+     * @param reliable Whether the data was sent reliably
      */
     void onDataReceived(byte[] data, boolean reliable);
 

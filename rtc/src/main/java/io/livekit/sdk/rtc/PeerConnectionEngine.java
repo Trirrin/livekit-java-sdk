@@ -12,13 +12,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * WebRTC engine implementation using webrtc-java library.
  * Manages publisher and subscriber peer connections.
  */
-public class PeerConnectionEngine implements RtcEngine {
+public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataChannelListener {
 
     private PeerConnectionFactory factory;
     private RTCPeerConnection publisherPc;
     private RTCPeerConnection subscriberPc;
     private RTCConfiguration rtcConfig;
     private RtcEngineListener listener;
+    private DataChannelManager dataChannelManager;
+    private MediaDevicesHelper mediaDevicesHelper;
 
     private final Map<String, RTCRtpSender> trackSenders = new ConcurrentHashMap<>();
     private final List<String> streamIds = new ArrayList<>();
@@ -27,6 +29,8 @@ public class PeerConnectionEngine implements RtcEngine {
 
     public PeerConnectionEngine() {
         streamIds.add("livekit");
+        this.dataChannelManager = new DataChannelManager();
+        this.dataChannelManager.setListener(this);
     }
 
     @Override
@@ -56,6 +60,12 @@ public class PeerConnectionEngine implements RtcEngine {
 
         publisherPc = factory.createPeerConnection(rtcConfig, new PublisherObserver());
         subscriberPc = factory.createPeerConnection(rtcConfig, new SubscriberObserver());
+
+        // Create data channels on publisher connection
+        dataChannelManager.createDataChannels(publisherPc);
+
+        // Initialize media devices helper
+        mediaDevicesHelper = new MediaDevicesHelper(factory);
 
         initialized = true;
     }
@@ -202,6 +212,11 @@ public class PeerConnectionEngine implements RtcEngine {
 
     @Override
     public void close() {
+        dataChannelManager.close();
+        if (mediaDevicesHelper != null) {
+            mediaDevicesHelper.dispose();
+            mediaDevicesHelper = null;
+        }
         if (publisherPc != null) {
             publisherPc.close();
             publisherPc = null;
@@ -265,6 +280,55 @@ public class PeerConnectionEngine implements RtcEngine {
     public void restartSubscriberIce() {
         if (subscriberPc != null) {
             subscriberPc.restartIce();
+        }
+    }
+
+    /**
+     * Send data through the data channel.
+     */
+    public boolean sendData(byte[] data, boolean reliable) {
+        return dataChannelManager.send(data, reliable);
+    }
+
+    /**
+     * Check if reliable data channel is open.
+     */
+    public boolean isReliableDataChannelOpen() {
+        return dataChannelManager.isReliableOpen();
+    }
+
+    /**
+     * Check if lossy data channel is open.
+     */
+    public boolean isLossyDataChannelOpen() {
+        return dataChannelManager.isLossyOpen();
+    }
+
+    /**
+     * Get the data channel manager.
+     */
+    public DataChannelManager getDataChannelManager() {
+        return dataChannelManager;
+    }
+
+    /**
+     * Get the media devices helper for device enumeration and track creation.
+     */
+    public MediaDevicesHelper getMediaDevicesHelper() {
+        return mediaDevicesHelper;
+    }
+
+    // DataChannelManager.DataChannelListener implementation
+
+    @Override
+    public void onDataChannelOpen(boolean reliable) {
+        // Channel opened, no-op for now
+    }
+
+    @Override
+    public void onDataReceived(byte[] data, boolean reliable) {
+        if (listener != null) {
+            listener.onDataReceived(data, reliable);
         }
     }
 
@@ -355,7 +419,7 @@ public class PeerConnectionEngine implements RtcEngine {
             if (listener != null && transceiver.getReceiver() != null) {
                 MediaStreamTrack track = transceiver.getReceiver().getTrack();
                 if (track != null) {
-                    listener.onRemoteTrackReceived(track, new String[]{"livekit"});
+                    listener.onRemoteTrackReceived(track, transceiver, new String[]{"livekit"});
                 }
             }
         }

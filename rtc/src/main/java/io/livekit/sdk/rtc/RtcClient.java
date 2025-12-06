@@ -2,21 +2,29 @@ package io.livekit.sdk.rtc;
 
 import dev.onvoid.webrtc.RTCIceCandidate;
 import dev.onvoid.webrtc.RTCIceConnectionState;
+import dev.onvoid.webrtc.RTCRtpTransceiver;
 import dev.onvoid.webrtc.RTCSdpType;
 import dev.onvoid.webrtc.RTCSessionDescription;
 import dev.onvoid.webrtc.media.MediaStreamTrack;
+import io.livekit.sdk.AudioTrack;
 import io.livekit.sdk.Room;
 import io.livekit.sdk.RoomOptions;
 import io.livekit.sdk.RoomSignalHandler;
+import io.livekit.sdk.Track;
+import io.livekit.sdk.TrackType;
+import io.livekit.sdk.VideoTrack;
 import io.livekit.sdk.signaling.ReconnectReason;
 import io.livekit.sdk.signaling.SignalClient;
 import io.livekit.sdk.signaling.SignalListener;
 import io.livekit.sdk.signaling.SignalState;
+import livekit.LivekitModels;
 import livekit.LivekitRtc;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Main client that coordinates Room, SignalClient, and RtcEngine.
@@ -28,6 +36,11 @@ public class RtcClient implements SignalListener, RtcEngineListener {
     private final SignalClient signalClient;
     private final RoomSignalHandler signalHandler;
     private final PeerConnectionEngine rtcEngine;
+
+    // Maps mid (media stream id from SDP) to track SID
+    private final Map<String, String> midToTrackSid = new ConcurrentHashMap<>();
+    // Maps track SID to the subscribed track
+    private final Map<String, Track> subscribedTracks = new ConcurrentHashMap<>();
 
     private CompletableFuture<Room> connectFuture;
     private boolean hasPublishedTracks = false;
@@ -88,6 +101,31 @@ public class RtcClient implements SignalListener, RtcEngineListener {
         rtcEngine.removeTrack(trackId);
     }
 
+    /**
+     * Send data to other participants.
+     */
+    public boolean publishData(io.livekit.sdk.DataPacket packet) {
+        boolean reliable = packet.getKind() == io.livekit.sdk.DataPacket.Kind.RELIABLE;
+
+        // Build protobuf DataPacket
+        LivekitModels.UserPacket.Builder userBuilder = LivekitModels.UserPacket.newBuilder()
+                .setPayload(com.google.protobuf.ByteString.copyFrom(packet.getData()));
+
+        if (packet.getTopic() != null) {
+            userBuilder.setTopic(packet.getTopic());
+        }
+
+        LivekitModels.DataPacket.Builder dataBuilder = LivekitModels.DataPacket.newBuilder()
+                .setKind(reliable ? LivekitModels.DataPacket.Kind.RELIABLE : LivekitModels.DataPacket.Kind.LOSSY)
+                .setUser(userBuilder.build());
+
+        if (packet.getDestinationIdentities() != null) {
+            dataBuilder.addAllDestinationIdentities(packet.getDestinationIdentities());
+        }
+
+        return rtcEngine.sendData(dataBuilder.build().toByteArray(), reliable);
+    }
+
     public Room getRoom() {
         return room;
     }
@@ -98,6 +136,62 @@ public class RtcClient implements SignalListener, RtcEngineListener {
 
     public PeerConnectionEngine getRtcEngine() {
         return rtcEngine;
+    }
+
+    /**
+     * Get available audio input devices.
+     */
+    public java.util.List<MediaDeviceInfo> getAudioInputDevices() {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.getAudioInputDevices() : java.util.Collections.emptyList();
+    }
+
+    /**
+     * Get available audio output devices.
+     */
+    public java.util.List<MediaDeviceInfo> getAudioOutputDevices() {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.getAudioOutputDevices() : java.util.Collections.emptyList();
+    }
+
+    /**
+     * Get available video input devices.
+     */
+    public java.util.List<MediaDeviceInfo> getVideoInputDevices() {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.getVideoInputDevices() : java.util.Collections.emptyList();
+    }
+
+    /**
+     * Create a local audio track using the default audio device.
+     */
+    public LocalAudioTrack createAudioTrack() {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.createAudioTrack() : null;
+    }
+
+    /**
+     * Create a local audio track using a specific device.
+     */
+    public LocalAudioTrack createAudioTrack(String deviceId, String name) {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.createAudioTrack(deviceId, name) : null;
+    }
+
+    /**
+     * Create a local video track using the default video device.
+     */
+    public LocalVideoTrack createVideoTrack() {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.createVideoTrack() : null;
+    }
+
+    /**
+     * Create a local video track with specified parameters.
+     */
+    public LocalVideoTrack createVideoTrack(String deviceId, String name, int width, int height, int frameRate) {
+        MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+        return helper != null ? helper.createVideoTrack(deviceId, name, width, height, frameRate) : null;
     }
 
     public void shutdown() {
@@ -146,6 +240,12 @@ public class RtcClient implements SignalListener, RtcEngineListener {
 
     @Override
     public void onOffer(LivekitRtc.SessionDescription offer) {
+        // Store mid to track SID mapping from offer
+        Map<String, String> midMap = offer.getMidToTrackIdMap();
+        if (midMap != null && !midMap.isEmpty()) {
+            midToTrackSid.putAll(midMap);
+        }
+
         RTCSessionDescription rtcOffer = new RTCSessionDescription(
                 RTCSdpType.OFFER,
                 offer.getSdp()
@@ -296,18 +396,84 @@ public class RtcClient implements SignalListener, RtcEngineListener {
     }
 
     @Override
-    public void onRemoteTrackReceived(MediaStreamTrack track, String[] streamIds) {
-        // TODO: Map to Room track subscriptions
+    public void onRemoteTrackReceived(MediaStreamTrack nativeTrack, RTCRtpTransceiver transceiver, String[] streamIds) {
+        String mid = transceiver.getMid();
+        if (mid == null) {
+            return;
+        }
+
+        String trackSid = midToTrackSid.get(mid);
+        if (trackSid == null) {
+            return;
+        }
+
+        // Create appropriate track wrapper based on media type
+        Track sdkTrack;
+        String kind = nativeTrack.getKind();
+        if ("audio".equals(kind)) {
+            sdkTrack = new RemoteAudioTrack(trackSid, trackSid,
+                    (dev.onvoid.webrtc.media.audio.AudioTrack) nativeTrack);
+        } else if ("video".equals(kind)) {
+            sdkTrack = new RemoteVideoTrack(trackSid, trackSid,
+                    (dev.onvoid.webrtc.media.video.VideoTrack) nativeTrack);
+        } else {
+            return;
+        }
+
+        subscribedTracks.put(trackSid, sdkTrack);
+        room.onTrackSubscribed(trackSid, sdkTrack);
     }
 
     @Override
-    public void onRemoteTrackRemoved(MediaStreamTrack track) {
-        // TODO: Handle track removal
+    public void onRemoteTrackRemoved(MediaStreamTrack nativeTrack) {
+        // Find and remove the track by matching native track
+        String removedSid = null;
+        Track removedTrack = null;
+
+        for (Map.Entry<String, Track> entry : subscribedTracks.entrySet()) {
+            Track track = entry.getValue();
+            boolean matches = false;
+            if (track instanceof RemoteAudioTrack) {
+                matches = ((RemoteAudioTrack) track).getNativeTrack() == nativeTrack;
+            } else if (track instanceof RemoteVideoTrack) {
+                matches = ((RemoteVideoTrack) track).getNativeTrack() == nativeTrack;
+            }
+            if (matches) {
+                removedSid = entry.getKey();
+                removedTrack = track;
+                break;
+            }
+        }
+
+        if (removedSid != null) {
+            subscribedTracks.remove(removedSid);
+            room.onTrackUnsubscribed(removedSid, removedTrack);
+        }
     }
 
     @Override
     public void onDataReceived(byte[] data, boolean reliable) {
-        // TODO: Forward to Room data handlers
+        try {
+            LivekitModels.DataPacket packet = LivekitModels.DataPacket.parseFrom(data);
+            io.livekit.sdk.DataPacket.Kind kind = reliable
+                    ? io.livekit.sdk.DataPacket.Kind.RELIABLE
+                    : io.livekit.sdk.DataPacket.Kind.LOSSY;
+
+            String participantSid = packet.getParticipantSid();
+            if (participantSid.isEmpty()) {
+                participantSid = null;
+            }
+
+            // Handle UserPacket (the most common case)
+            if (packet.hasUser()) {
+                LivekitModels.UserPacket user = packet.getUser();
+                byte[] payload = user.getPayload().toByteArray();
+                String topic = user.hasTopic() ? user.getTopic() : null;
+                room.onDataReceived(payload, kind, participantSid, topic);
+            }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            onError("Failed to parse data packet: " + e.getMessage());
+        }
     }
 
     @Override
