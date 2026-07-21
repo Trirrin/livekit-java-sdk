@@ -8,9 +8,14 @@ import dev.onvoid.webrtc.media.audio.AudioOptions;
 import dev.onvoid.webrtc.media.audio.AudioTrack;
 import dev.onvoid.webrtc.media.audio.AudioTrackSource;
 import dev.onvoid.webrtc.media.video.VideoCaptureCapability;
+import dev.onvoid.webrtc.media.video.VideoDesktopSource;
 import dev.onvoid.webrtc.media.video.VideoDevice;
 import dev.onvoid.webrtc.media.video.VideoDeviceSource;
 import dev.onvoid.webrtc.media.video.VideoTrack;
+import dev.onvoid.webrtc.media.video.desktop.DesktopCapturer;
+import dev.onvoid.webrtc.media.video.desktop.DesktopSource;
+import dev.onvoid.webrtc.media.video.desktop.ScreenCapturer;
+import dev.onvoid.webrtc.media.video.desktop.WindowCapturer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -161,7 +166,85 @@ public class MediaDevicesHelper {
       String trackId = "video-" + UUID.randomUUID();
       VideoTrack nativeTrack = factory.createVideoTrack(trackId, videoSource);
 
-      return new LocalVideoTrack(trackId, name, nativeTrack, width, height);
+      return new LocalVideoTrack(
+          trackId,
+          name,
+          nativeTrack,
+          width,
+          height,
+          () -> {
+            videoSource.stop();
+            videoSource.dispose();
+          });
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  /** Get a list of shareable screens. */
+  public List<DesktopSourceInfo> getScreenSources() {
+    return getDesktopSources(new ScreenCapturer(), false);
+  }
+
+  /** Get a list of shareable application windows. */
+  public List<DesktopSourceInfo> getWindowSources() {
+    return getDesktopSources(new WindowCapturer(), true);
+  }
+
+  private List<DesktopSourceInfo> getDesktopSources(DesktopCapturer capturer, boolean window) {
+    List<DesktopSourceInfo> sources = new ArrayList<>();
+    try {
+      for (DesktopSource source : capturer.getDesktopSources()) {
+        sources.add(new DesktopSourceInfo(source.id, source.title, window));
+      }
+    } catch (Exception e) {
+      // Desktop capture may be unavailable on some platforms
+    } finally {
+      capturer.dispose();
+    }
+    return sources;
+  }
+
+  /** Create a screen share track capturing the primary screen. */
+  public LocalVideoTrack createScreenShareTrack() {
+    List<DesktopSourceInfo> screens = getScreenSources();
+    if (screens.isEmpty()) {
+      return null;
+    }
+    return createScreenShareTrack(screens.get(0), "screen", 1920, 1080, 30);
+  }
+
+  /**
+   * Create a screen share track for a specific desktop source.
+   *
+   * @param source screen or window to capture
+   * @param name track name
+   * @param maxWidth maximum capture width
+   * @param maxHeight maximum capture height
+   * @param frameRate capture frame rate in fps
+   */
+  public LocalVideoTrack createScreenShareTrack(
+      DesktopSourceInfo source, String name, int maxWidth, int maxHeight, int frameRate) {
+    try {
+      VideoDesktopSource videoSource = new VideoDesktopSource();
+      videoSource.setSourceId(source.getId(), source.isWindow());
+      videoSource.setFrameRate(frameRate);
+      videoSource.setMaxFrameSize(maxWidth, maxHeight);
+      videoSource.start();
+
+      String trackId = "screen-" + UUID.randomUUID();
+      VideoTrack nativeTrack = factory.createVideoTrack(trackId, videoSource);
+
+      return new LocalVideoTrack(
+          trackId,
+          name,
+          nativeTrack,
+          maxWidth,
+          maxHeight,
+          () -> {
+            videoSource.stop();
+            videoSource.dispose();
+          });
     } catch (Exception e) {
       return null;
     }

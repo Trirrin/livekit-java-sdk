@@ -40,12 +40,22 @@ public class RtcClient
   private final Map<String, String> midToTrackSid = new ConcurrentHashMap<>();
   // Maps track SID to the subscribed track
   private final Map<String, Track> subscribedTracks = new ConcurrentHashMap<>();
-  // Published local tracks
-  private LocalAudioTrack publishedAudioTrack;
-  private LocalVideoTrack publishedVideoTrack;
+  // Published local tracks, keyed by client-generated track id (cid)
+  private final Map<String, PublishedTrack> publishedTracks = new ConcurrentHashMap<>();
 
   private CompletableFuture<Room> connectFuture;
   private boolean hasPublishedTracks = false;
+
+  /** A published local track together with its source. */
+  private static final class PublishedTrack {
+    final LocalMediaTrack track;
+    final LivekitModels.TrackSource source;
+
+    PublishedTrack(LocalMediaTrack track, LivekitModels.TrackSource source) {
+      this.track = track;
+      this.source = source;
+    }
+  }
 
   public RtcClient() {
     this(new RoomOptions());
@@ -80,9 +90,14 @@ public class RtcClient
     room.disconnect();
   }
 
-  /** Publish a local audio track. */
+  /** Publish a local audio track as microphone audio. */
   public void publishAudioTrack(LocalAudioTrack track) {
-    publishedAudioTrack = track;
+    publishAudioTrack(track, LivekitModels.TrackSource.MICROPHONE);
+  }
+
+  /** Publish a local audio track with an explicit source. */
+  public void publishAudioTrack(LocalAudioTrack track, LivekitModels.TrackSource source) {
+    publishedTracks.put(track.getId(), new PublishedTrack(track, source));
 
     // Send AddTrackRequest to server before adding to PeerConnection
     LivekitRtc.AddTrackRequest addTrack =
@@ -90,7 +105,7 @@ public class RtcClient
             .setCid(track.getId())
             .setName(track.getName())
             .setType(LivekitModels.TrackType.AUDIO)
-            .setSource(LivekitModels.TrackSource.MICROPHONE)
+            .setSource(source)
             .build();
     signalClient.sendAddTrack(addTrack);
 
@@ -98,9 +113,14 @@ public class RtcClient
     hasPublishedTracks = true;
   }
 
-  /** Publish a local video track. */
+  /** Publish a local video track as camera video. */
   public void publishVideoTrack(LocalVideoTrack track) {
-    publishedVideoTrack = track;
+    publishVideoTrack(track, LivekitModels.TrackSource.CAMERA);
+  }
+
+  /** Publish a local video track with an explicit source (camera or screen share). */
+  public void publishVideoTrack(LocalVideoTrack track, LivekitModels.TrackSource source) {
+    publishedTracks.put(track.getId(), new PublishedTrack(track, source));
 
     // Send AddTrackRequest to server before adding to PeerConnection
     LivekitRtc.AddTrackRequest addTrack =
@@ -108,7 +128,7 @@ public class RtcClient
             .setCid(track.getId())
             .setName(track.getName())
             .setType(LivekitModels.TrackType.VIDEO)
-            .setSource(LivekitModels.TrackSource.CAMERA)
+            .setSource(source)
             .setWidth(track.getWidth())
             .setHeight(track.getHeight())
             .build();
@@ -120,13 +140,17 @@ public class RtcClient
 
   /** Unpublish a track. */
   public void unpublishTrack(String trackId) {
-    if (publishedAudioTrack != null && publishedAudioTrack.getId().equals(trackId)) {
-      publishedAudioTrack = null;
-    }
-    if (publishedVideoTrack != null && publishedVideoTrack.getId().equals(trackId)) {
-      publishedVideoTrack = null;
-    }
+    publishedTracks.remove(trackId);
     rtcEngine.removeTrack(trackId);
+  }
+
+  private PublishedTrack findBySource(LivekitModels.TrackSource source) {
+    for (PublishedTrack published : publishedTracks.values()) {
+      if (published.source == source) {
+        return published;
+      }
+    }
+    return null;
   }
 
   /** Send data to other participants. */
@@ -328,11 +352,9 @@ public class RtcClient
     String sid = response.getTrack().getSid();
 
     // Store SID in local track for mute signaling
-    if (publishedAudioTrack != null && publishedAudioTrack.getId().equals(cid)) {
-      publishedAudioTrack.setSid(sid);
-    }
-    if (publishedVideoTrack != null && publishedVideoTrack.getId().equals(cid)) {
-      publishedVideoTrack.setSid(sid);
+    PublishedTrack published = publishedTracks.get(cid);
+    if (published != null) {
+      published.track.setSid(sid);
     }
 
     signalHandler.onTrackPublished(response);
@@ -346,14 +368,10 @@ public class RtcClient
   @Override
   public void onLeave(LivekitRtc.LeaveRequest leave) {
     // Clean up local tracks
-    if (publishedAudioTrack != null) {
-      publishedAudioTrack.dispose();
-      publishedAudioTrack = null;
+    for (PublishedTrack published : publishedTracks.values()) {
+      published.track.dispose();
     }
-    if (publishedVideoTrack != null) {
-      publishedVideoTrack.dispose();
-      publishedVideoTrack = null;
-    }
+    publishedTracks.clear();
 
     rtcEngine.close();
     signalClient.disconnect();
@@ -366,11 +384,10 @@ public class RtcClient
     boolean muted = mute.getMuted();
 
     // Apply mute state to local track
-    if (publishedAudioTrack != null && sid.equals(publishedAudioTrack.getSid())) {
-      publishedAudioTrack.setMuted(muted);
-    }
-    if (publishedVideoTrack != null && sid.equals(publishedVideoTrack.getSid())) {
-      publishedVideoTrack.setMuted(muted);
+    for (PublishedTrack published : publishedTracks.values()) {
+      if (sid.equals(published.track.getSid())) {
+        published.track.setMuted(muted);
+      }
     }
 
     signalHandler.onMuteTrack(mute);
@@ -626,54 +643,92 @@ public class RtcClient
 
   @Override
   public void setMicrophoneEnabled(boolean enabled) {
-    if (publishedAudioTrack != null) {
-      boolean muted = !enabled;
-      publishedAudioTrack.setMuted(muted);
-
-      // Send mute state to server
-      String sid = publishedAudioTrack.getSid();
-      if (sid != null) {
-        LivekitRtc.MuteTrackRequest muteRequest =
-            LivekitRtc.MuteTrackRequest.newBuilder().setSid(sid).setMuted(muted).build();
-        signalClient.sendMuteTrack(muteRequest);
-      }
-    }
+    setSourceMuted(LivekitModels.TrackSource.MICROPHONE, !enabled);
   }
 
   @Override
   public void setCameraEnabled(boolean enabled) {
-    if (publishedVideoTrack != null) {
-      boolean muted = !enabled;
-      publishedVideoTrack.setMuted(muted);
+    setSourceMuted(LivekitModels.TrackSource.CAMERA, !enabled);
+  }
 
-      // Send mute state to server
-      String sid = publishedVideoTrack.getSid();
-      if (sid != null) {
-        LivekitRtc.MuteTrackRequest muteRequest =
-            LivekitRtc.MuteTrackRequest.newBuilder().setSid(sid).setMuted(muted).build();
-        signalClient.sendMuteTrack(muteRequest);
-      }
+  private void setSourceMuted(LivekitModels.TrackSource source, boolean muted) {
+    PublishedTrack published = findBySource(source);
+    if (published == null) {
+      return;
+    }
+    published.track.setMuted(muted);
+
+    // Send mute state to server
+    String sid = published.track.getSid();
+    if (sid != null) {
+      sendMuteTrack(sid, muted);
     }
   }
 
   @Override
   public void setScreenShareEnabled(boolean enabled) {
-    // Screen share is not yet implemented - tracked in TODOS.md
+    PublishedTrack existing = findBySource(LivekitModels.TrackSource.SCREEN_SHARE);
+    if (enabled) {
+      if (existing != null) {
+        return;
+      }
+      MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+      if (helper == null) {
+        return;
+      }
+      LocalVideoTrack track = helper.createScreenShareTrack();
+      if (track != null) {
+        publishVideoTrack(track, LivekitModels.TrackSource.SCREEN_SHARE);
+      }
+    } else {
+      if (existing == null) {
+        return;
+      }
+      unpublishTrack(existing.track.getId());
+      existing.track.dispose();
+    }
+  }
+
+  /** Publish a screen share track for a specific screen or window. */
+  public void publishScreenShareTrack(DesktopSourceInfo source, int maxWidth, int maxHeight) {
+    MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+    if (helper == null) {
+      return;
+    }
+    LocalVideoTrack track =
+        helper.createScreenShareTrack(source, "screen", maxWidth, maxHeight, 30);
+    if (track != null) {
+      publishVideoTrack(track, LivekitModels.TrackSource.SCREEN_SHARE);
+    }
+  }
+
+  /** Get shareable screens. */
+  public java.util.List<DesktopSourceInfo> getScreenSources() {
+    MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+    return helper != null ? helper.getScreenSources() : java.util.Collections.emptyList();
+  }
+
+  /** Get shareable application windows. */
+  public java.util.List<DesktopSourceInfo> getWindowSources() {
+    MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+    return helper != null ? helper.getWindowSources() : java.util.Collections.emptyList();
   }
 
   @Override
   public boolean isMicrophoneEnabled() {
-    return publishedAudioTrack != null && !publishedAudioTrack.isMuted();
+    PublishedTrack published = findBySource(LivekitModels.TrackSource.MICROPHONE);
+    return published != null && !published.track.isMuted();
   }
 
   @Override
   public boolean isCameraEnabled() {
-    return publishedVideoTrack != null && !publishedVideoTrack.isMuted();
+    PublishedTrack published = findBySource(LivekitModels.TrackSource.CAMERA);
+    return published != null && !published.track.isMuted();
   }
 
   @Override
   public boolean isScreenShareEnabled() {
-    // Screen share is not yet implemented
-    return false;
+    PublishedTrack published = findBySource(LivekitModels.TrackSource.SCREEN_SHARE);
+    return published != null && !published.track.isMuted();
   }
 }

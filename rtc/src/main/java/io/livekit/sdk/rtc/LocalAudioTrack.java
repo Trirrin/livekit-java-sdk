@@ -3,7 +3,7 @@ package io.livekit.sdk.rtc;
 import dev.onvoid.webrtc.media.audio.AudioTrack;
 
 /** Wrapper for a local audio track to be published. */
-public class LocalAudioTrack {
+public class LocalAudioTrack implements LocalMediaTrack {
   private final String id;
   private final String name;
   private final AudioTrack nativeTrack;
