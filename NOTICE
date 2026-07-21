@@ -1,0 +1,12 @@
+LiveKit Java SDK
+Copyright 2026 Trirrin
+
+This product includes software developed at LiveKit, Inc.
+(https://livekit.io/).
+
+The Protocol Buffer definitions under protocol/src/main/proto/ are derived
+from the LiveKit protocol definitions (https://github.com/livekit/protocol),
+Copyright 2023 LiveKit, Inc., licensed under the Apache License, Version 2.0.
+
+This project is an independent, community-maintained Java client SDK and is
+not an official LiveKit product.
