@@ -40,10 +40,10 @@ repositories {
 
 dependencies {
     // Full SDK with WebRTC support
-    implementation("com.github.Trirrin.livekit-java-sdk:rtc:v0.1.0")
+    implementation("com.github.Trirrin.livekit-java-sdk:rtc:v0.1.4")
     
     // Or signaling only (no audio/video)
-    // implementation("com.github.Trirrin.livekit-java-sdk:signaling:v0.1.0")
+    // implementation("com.github.Trirrin.livekit-java-sdk:signaling:v0.1.4")
 }
 ```
 
@@ -56,7 +56,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.github.Trirrin.livekit-java-sdk:rtc:v0.1.0'
+    implementation 'com.github.Trirrin.livekit-java-sdk:rtc:v0.1.4'
 }
 ```
 
@@ -74,7 +74,7 @@ dependencies {
     <dependency>
         <groupId>com.github.Trirrin.livekit-java-sdk</groupId>
         <artifactId>rtc</artifactId>
-        <version>v0.1.0</version>
+        <version>v0.1.4</version>
     </dependency>
 </dependencies>
 ```
