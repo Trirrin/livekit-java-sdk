@@ -8,6 +8,7 @@ public class LocalParticipant extends Participant {
   private final Map<String, TrackPublication> localTrackPublications;
   private LocalTrackManager trackManager;
   private RoomTransport transport;
+  private io.livekit.sdk.rpc.RpcManager rpcManager;
 
   public LocalParticipant(String sid, String identity) {
     super(sid, identity);
@@ -25,6 +26,41 @@ public class LocalParticipant extends Participant {
 
   RoomTransport getTransport() {
     return transport;
+  }
+
+  void setRpcManager(io.livekit.sdk.rpc.RpcManager rpcManager) {
+    this.rpcManager = rpcManager;
+  }
+
+  private io.livekit.sdk.rpc.RpcManager requireRpcManager() {
+    if (rpcManager == null) {
+      throw new IllegalStateException("Not connected: no transport available");
+    }
+    return rpcManager;
+  }
+
+  /** Invoke an RPC method on a remote participant with the default 10s response timeout. */
+  public java.util.concurrent.CompletableFuture<String> performRpc(
+      String destinationIdentity, String method, String payload) {
+    return requireRpcManager().performRpc(destinationIdentity, method, payload);
+  }
+
+  /** Invoke an RPC method on a remote participant. */
+  public java.util.concurrent.CompletableFuture<String> performRpc(
+      String destinationIdentity, String method, String payload, long responseTimeoutMs) {
+    return requireRpcManager().performRpc(destinationIdentity, method, payload, responseTimeoutMs);
+  }
+
+  /** Register a handler for an RPC method that remote participants can invoke. */
+  public void registerRpcMethod(String method, io.livekit.sdk.rpc.RpcHandler handler) {
+    requireRpcManager().registerMethod(method, handler);
+  }
+
+  /** Unregister a previously registered RPC method. */
+  public void unregisterRpcMethod(String method) {
+    if (rpcManager != null) {
+      rpcManager.unregisterMethod(method);
+    }
   }
 
   /** Get the track manager. */

@@ -581,19 +581,7 @@ public class RtcClient
       LivekitModels.DataPacket packet = LivekitModels.DataPacket.parseFrom(data);
       io.livekit.sdk.DataPacket.Kind kind =
           reliable ? io.livekit.sdk.DataPacket.Kind.RELIABLE : io.livekit.sdk.DataPacket.Kind.LOSSY;
-
-      String participantSid = packet.getParticipantSid();
-      if (participantSid.isEmpty()) {
-        participantSid = null;
-      }
-
-      // Handle UserPacket (the most common case)
-      if (packet.hasUser()) {
-        LivekitModels.UserPacket user = packet.getUser();
-        byte[] payload = user.getPayload().toByteArray();
-        String topic = user.hasTopic() ? user.getTopic() : null;
-        room.onDataReceived(payload, kind, participantSid, topic);
-      }
+      room.handleDataPacket(packet, kind);
     } catch (com.google.protobuf.InvalidProtocolBufferException e) {
       onError("Failed to parse data packet: " + e.getMessage());
     }

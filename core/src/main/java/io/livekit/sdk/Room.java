@@ -21,6 +21,7 @@ public class Room implements TrackSubscriptionHandler {
   private final RoomOptions options;
   private RoomSignalHandler signalHandler;
   private RoomTransport transport;
+  private io.livekit.sdk.rpc.RpcManager rpcManager;
 
   public Room() {
     this(new RoomOptions());
@@ -44,9 +45,18 @@ public class Room implements TrackSubscriptionHandler {
   /** Set the outbound transport. Called by the RTC layer that owns signaling and data channels. */
   public void setTransport(RoomTransport transport) {
     this.transport = transport;
+    if (transport != null && rpcManager == null) {
+      rpcManager = new io.livekit.sdk.rpc.RpcManager(transport);
+    }
     if (localParticipant != null) {
       localParticipant.setTransport(transport);
+      localParticipant.setRpcManager(rpcManager);
     }
+  }
+
+  /** Get the RPC manager. Available once a transport has been set. */
+  public io.livekit.sdk.rpc.RpcManager getRpcManager() {
+    return rpcManager;
   }
 
   public RoomTransport getTransport() {
@@ -73,6 +83,9 @@ public class Room implements TrackSubscriptionHandler {
       return;
     }
     setState(ConnectionState.DISCONNECTED);
+    if (rpcManager != null) {
+      rpcManager.failAllPending();
+    }
     clearParticipants();
     notifyDisconnected(DisconnectReason.CLIENT_INITIATED);
   }
@@ -107,6 +120,7 @@ public class Room implements TrackSubscriptionHandler {
     // Create local participant
     this.localParticipant = ProtoConverter.localParticipantFromProto(response.getParticipant());
     this.localParticipant.setTransport(transport);
+    this.localParticipant.setRpcManager(rpcManager);
 
     // Add local participant tracks
     for (LivekitModels.TrackInfo trackInfo : response.getParticipant().getTracksList()) {
@@ -283,6 +297,9 @@ public class Room implements TrackSubscriptionHandler {
   void handleLeave(LivekitRtc.LeaveRequest leave) {
     DisconnectReason reason = ProtoConverter.fromProto(leave.getReason());
     setState(ConnectionState.DISCONNECTED);
+    if (rpcManager != null) {
+      rpcManager.failAllPending();
+    }
     clearParticipants();
     notifyDisconnected(reason);
   }
@@ -443,6 +460,9 @@ public class Room implements TrackSubscriptionHandler {
   void removeRemoteParticipant(String identity) {
     RemoteParticipant participant = remoteParticipants.remove(identity);
     if (participant != null) {
+      if (rpcManager != null) {
+        rpcManager.handleParticipantDisconnected(identity);
+      }
       notifyParticipantDisconnected(participant);
     }
   }
@@ -660,5 +680,51 @@ public class Room implements TrackSubscriptionHandler {
       }
     }
     notifyDataReceived(data, sender, kind, topic);
+  }
+
+  /** Dispatch an incoming protobuf data packet from the RTC layer. */
+  public void handleDataPacket(LivekitModels.DataPacket packet, DataPacket.Kind kind) {
+    switch (packet.getValueCase()) {
+      case USER:
+        LivekitModels.UserPacket user = packet.getUser();
+        RemoteParticipant sender = findSender(packet);
+        String topic = user.hasTopic() ? user.getTopic() : null;
+        notifyDataReceived(user.getPayload().toByteArray(), sender, kind, topic);
+        break;
+      case RPC_REQUEST:
+        if (rpcManager != null) {
+          rpcManager.handleRequest(packet.getParticipantIdentity(), packet.getRpcRequest());
+        }
+        break;
+      case RPC_ACK:
+        if (rpcManager != null) {
+          rpcManager.handleAck(packet.getRpcAck());
+        }
+        break;
+      case RPC_RESPONSE:
+        if (rpcManager != null) {
+          rpcManager.handleResponse(packet.getRpcResponse());
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  private RemoteParticipant findSender(LivekitModels.DataPacket packet) {
+    if (!packet.getParticipantIdentity().isEmpty()) {
+      RemoteParticipant byIdentity = remoteParticipants.get(packet.getParticipantIdentity());
+      if (byIdentity != null) {
+        return byIdentity;
+      }
+    }
+    if (!packet.getParticipantSid().isEmpty()) {
+      for (RemoteParticipant p : remoteParticipants.values()) {
+        if (p.getSid().equals(packet.getParticipantSid())) {
+          return p;
+        }
+      }
+    }
+    return null;
   }
 }
