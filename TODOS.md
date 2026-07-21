@@ -66,11 +66,21 @@
 The remaining gaps against official client SDKs all need native APIs that
 `dev.onvoid.webrtc:webrtc-java` (0.14.0, latest) does not expose:
 
-- [ ] **Simulcast** - `RTCRtpEncodingParameters` lacks the `rid` field required for
-  unified-plan simulcast negotiation (small JNI patch: Java field + JNI mapping)
-- [ ] **SVC (VP9/AV1)** - `RTCRtpEncodingParameters` lacks `scalabilityMode` (small JNI patch)
-- [ ] **Dynacast** - publisher-side layer pausing; depends on simulcast above
-- [ ] **Media track E2EE** - `FrameCryptor` only exists in LiveKit's `webrtc-sdk/webrtc` fork of
+- [ ] **Simulcast** - publish the same camera track as multiple resolution layers (q/h/f) so the
+  SFU can pick a layer per subscriber; this is what makes the subscriber-side
+  `setVideoQuality`/`setVideoDimensions` controls meaningful against our own publishers.
+  Blocked: `RTCRtpEncodingParameters` lacks the `rid` field required for unified-plan simulcast
+  negotiation (small JNI patch: Java field + JNI mapping)
+- [ ] **SVC (VP9/AV1)** - next-gen alternative to simulcast: one encoded stream carrying multiple
+  spatial/temporal layers (modes like `L3T3`), cheaper in bandwidth and encoder load.
+  Blocked: `RTCRtpEncodingParameters` lacks `scalabilityMode` (small JNI patch); also verify
+  VP9/AV1 encoders are enabled in the native build
+- [ ] **Dynacast** - publisher pauses simulcast layers nobody subscribes to, saving uplink
+  bandwidth; the signaling side (`SubscribedQualityUpdate`) is already handled, the per-layer
+  `active` control depends on simulcast above
+- [ ] **Media track E2EE** - per-frame AES-GCM encryption of encoded audio/video so the SFU cannot
+  decrypt media (data-channel E2EE already works; the existing `KeyProvider`/ratcheting can be
+  reused). Blocked: `FrameCryptor` only exists in LiveKit's `webrtc-sdk/webrtc` fork of
   libwebrtc; needs forking webrtc-java, building native against the LiveKit fork (or binding
   upstream `FrameTransformer` and implementing the LiveKit frame format in Java), per platform
 
