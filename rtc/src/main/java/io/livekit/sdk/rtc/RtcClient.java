@@ -58,6 +58,9 @@ public class RtcClient
     this.rtcEngine = new PeerConnectionEngine();
 
     this.signalClient.addListener(this);
+    this.signalClient.setAutoSubscribe(options.isAutoSubscribe());
+    this.signalClient.setMaxReconnectAttempts(options.getReconnectAttempts());
+    this.signalClient.setReconnectDelayMs(options.getReconnectDelayMs());
     this.rtcEngine.setListener(this);
     this.room.setTransport(this);
   }
@@ -391,6 +394,31 @@ public class RtcClient
   @Override
   public void onStreamStateUpdate(LivekitRtc.StreamStateUpdate streamState) {
     signalHandler.onStreamStateUpdate(streamState);
+  }
+
+  @Override
+  public void onSubscriptionPermissionUpdate(LivekitRtc.SubscriptionPermissionUpdate update) {
+    signalHandler.onSubscriptionPermissionUpdate(update);
+  }
+
+  @Override
+  public void onSubscriptionResponse(LivekitRtc.SubscriptionResponse response) {
+    signalHandler.onSubscriptionResponse(response);
+  }
+
+  @Override
+  public void onRequestResponse(LivekitRtc.RequestResponse response) {
+    signalHandler.onRequestResponse(response);
+  }
+
+  @Override
+  public void onLocalTrackSubscribed(LivekitRtc.TrackSubscribed trackSubscribed) {
+    signalHandler.onLocalTrackSubscribed(trackSubscribed);
+  }
+
+  @Override
+  public void onRoomMoved(LivekitRtc.RoomMovedResponse moved) {
+    signalHandler.onRoomMoved(moved);
   }
 
   @Override

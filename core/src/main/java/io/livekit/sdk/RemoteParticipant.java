@@ -9,16 +9,22 @@ public class RemoteParticipant extends Participant {
 
   /** Subscribe to a remote track publication. */
   public void subscribe(TrackPublication publication) {
-    // Will be implemented with RTC transport
+    if (publication instanceof RemoteTrackPublication) {
+      ((RemoteTrackPublication) publication).setSubscribed(true);
+    }
   }
 
   /** Unsubscribe from a remote track publication. */
   public void unsubscribe(TrackPublication publication) {
-    // Will be implemented with RTC transport
+    if (publication instanceof RemoteTrackPublication) {
+      ((RemoteTrackPublication) publication).setSubscribed(false);
+    }
   }
 
-  /** Update track subscription permissions. */
-  public void setSubscriptionPermissions(boolean allowed) {
-    // Will be implemented with signaling
-  }
+  /**
+   * @deprecated Subscription permissions are controlled by the publishing participant; use {@link
+   *     LocalParticipant#setTrackSubscriptionPermissions}.
+   */
+  @Deprecated
+  public void setSubscriptionPermissions(boolean allowed) {}
 }

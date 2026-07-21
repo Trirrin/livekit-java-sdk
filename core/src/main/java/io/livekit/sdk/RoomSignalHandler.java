@@ -75,7 +75,27 @@ public class RoomSignalHandler {
   }
 
   public void onStreamStateUpdate(LivekitRtc.StreamStateUpdate streamState) {
-    // Stream state handling for adaptive streaming
+    room.handleStreamStateUpdate(streamState);
+  }
+
+  public void onSubscriptionPermissionUpdate(LivekitRtc.SubscriptionPermissionUpdate update) {
+    room.handleSubscriptionPermissionUpdate(update);
+  }
+
+  public void onSubscriptionResponse(LivekitRtc.SubscriptionResponse response) {
+    room.handleSubscriptionResponse(response);
+  }
+
+  public void onRequestResponse(LivekitRtc.RequestResponse response) {
+    room.handleRequestResponse(response);
+  }
+
+  public void onLocalTrackSubscribed(LivekitRtc.TrackSubscribed trackSubscribed) {
+    room.handleLocalTrackSubscribed(trackSubscribed.getTrackSid());
+  }
+
+  public void onRoomMoved(LivekitRtc.RoomMovedResponse moved) {
+    room.handleRoomMoved(moved);
   }
 
   public void onRefreshToken(String token) {

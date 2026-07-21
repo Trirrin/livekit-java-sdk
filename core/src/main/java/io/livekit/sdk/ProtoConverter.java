@@ -137,9 +137,15 @@ public final class ProtoConverter {
   public static TrackPublication trackPublicationFromProto(LivekitModels.TrackInfo info) {
     TrackPublication publication =
         new TrackPublication(info.getSid(), info.getName(), fromProto(info.getType()));
-    publication.setSource(fromProto(info.getSource()));
-    publication.setMuted(info.getMuted());
-    publication.setMimeType(info.getMimeType());
+    updateTrackPublicationFromProto(publication, info);
+    return publication;
+  }
+
+  public static RemoteTrackPublication remoteTrackPublicationFromProto(
+      LivekitModels.TrackInfo info) {
+    RemoteTrackPublication publication =
+        new RemoteTrackPublication(info.getSid(), info.getName(), fromProto(info.getType()));
+    updateTrackPublicationFromProto(publication, info);
     return publication;
   }
 

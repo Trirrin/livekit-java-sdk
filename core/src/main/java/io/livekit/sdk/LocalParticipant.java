@@ -111,6 +111,29 @@ public class LocalParticipant extends Participant {
   }
 
   /**
+   * Control who can subscribe to the local participant's published tracks.
+   *
+   * @param allParticipantsAllowed when true, all participants may subscribe and permissions are
+   *     ignored
+   * @param permissions per-participant permissions applied when allParticipantsAllowed is false
+   */
+  public void setTrackSubscriptionPermissions(
+      boolean allParticipantsAllowed, java.util.List<ParticipantTrackPermission> permissions) {
+    if (transport == null) {
+      throw new IllegalStateException("Not connected: no transport available");
+    }
+    livekit.LivekitRtc.SubscriptionPermission.Builder builder =
+        livekit.LivekitRtc.SubscriptionPermission.newBuilder()
+            .setAllParticipants(allParticipantsAllowed);
+    if (permissions != null) {
+      for (ParticipantTrackPermission permission : permissions) {
+        builder.addTrackPermissions(permission.toProto());
+      }
+    }
+    transport.sendSubscriptionPermission(builder.build());
+  }
+
+  /**
    * @deprecated Use {@link #updateMetadata(String)}.
    */
   @Deprecated

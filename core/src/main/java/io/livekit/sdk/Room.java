@@ -203,7 +203,14 @@ public class Room implements TrackSubscriptionHandler {
           }
         }
       } else {
-        TrackPublication pub = ProtoConverter.trackPublicationFromProto(info);
+        TrackPublication pub;
+        if (participant instanceof RemoteParticipant) {
+          RemoteTrackPublication remotePub = ProtoConverter.remoteTrackPublicationFromProto(info);
+          remotePub.attach(transport, participant.getSid());
+          pub = remotePub;
+        } else {
+          pub = ProtoConverter.trackPublicationFromProto(info);
+        }
         participant.addTrackPublication(pub);
         notifyTrackPublished(pub, participant);
       }
@@ -278,6 +285,76 @@ public class Room implements TrackSubscriptionHandler {
     setState(ConnectionState.DISCONNECTED);
     clearParticipants();
     notifyDisconnected(reason);
+  }
+
+  void handleStreamStateUpdate(LivekitRtc.StreamStateUpdate update) {
+    for (LivekitRtc.StreamStateInfo info : update.getStreamStatesList()) {
+      Participant participant = findParticipantBySid(info.getParticipantSid());
+      if (participant == null) {
+        continue;
+      }
+      TrackPublication pub = participant.getTrackPublication(info.getTrackSid());
+      if (pub instanceof RemoteTrackPublication) {
+        RemoteTrackPublication remotePub = (RemoteTrackPublication) pub;
+        TrackStreamState state = TrackStreamState.fromProto(info.getState());
+        remotePub.setStreamState(state);
+        notifyTrackStreamStateChanged(remotePub, state, participant);
+      }
+    }
+  }
+
+  void handleSubscriptionPermissionUpdate(LivekitRtc.SubscriptionPermissionUpdate update) {
+    Participant participant = findParticipantBySid(update.getParticipantSid());
+    if (participant == null) {
+      return;
+    }
+    TrackPublication pub = participant.getTrackPublication(update.getTrackSid());
+    if (pub instanceof RemoteTrackPublication) {
+      RemoteTrackPublication remotePub = (RemoteTrackPublication) pub;
+      remotePub.setSubscriptionAllowed(update.getAllowed());
+      notifyTrackSubscriptionPermissionChanged(remotePub, participant, update.getAllowed());
+    }
+  }
+
+  void handleSubscriptionResponse(LivekitRtc.SubscriptionResponse response) {
+    notifyTrackSubscriptionFailed(response.getTrackSid(), response.getErr().name());
+  }
+
+  void handleRequestResponse(LivekitRtc.RequestResponse response) {
+    if (response.getReason() != LivekitRtc.RequestResponse.Reason.OK) {
+      notifySignalRequestError(
+          response.getRequestId(), response.getReason().name(), response.getMessage());
+    }
+  }
+
+  void handleLocalTrackSubscribed(String trackSid) {
+    if (localParticipant == null) {
+      return;
+    }
+    TrackPublication pub = localParticipant.getTrackPublication(trackSid);
+    if (pub != null) {
+      notifyLocalTrackSubscribed(pub);
+    }
+  }
+
+  void handleRoomMoved(LivekitRtc.RoomMovedResponse moved) {
+    this.sid = moved.getRoom().getSid();
+    this.name = moved.getRoom().getName();
+    this.metadata = moved.getRoom().getMetadata();
+
+    // Re-sync participant state for the new room
+    clearRemoteParticipants();
+    if (moved.hasParticipant() && localParticipant != null) {
+      applyParticipantUpdate(localParticipant, moved.getParticipant());
+    }
+    for (LivekitModels.ParticipantInfo info : moved.getOtherParticipantsList()) {
+      handleParticipantInfo(info);
+    }
+    notifyRoomMoved();
+  }
+
+  private void clearRemoteParticipants() {
+    remoteParticipants.clear();
   }
 
   void handleReconnecting() {
@@ -499,6 +576,44 @@ public class Room implements TrackSubscriptionHandler {
       Participant participant, Map<String, String> prevAttributes) {
     for (RoomListener listener : listeners) {
       listener.onParticipantAttributesChanged(this, participant, prevAttributes);
+    }
+  }
+
+  void notifyTrackStreamStateChanged(
+      RemoteTrackPublication publication, TrackStreamState state, Participant participant) {
+    for (RoomListener listener : listeners) {
+      listener.onTrackStreamStateChanged(this, publication, state, participant);
+    }
+  }
+
+  void notifyTrackSubscriptionPermissionChanged(
+      RemoteTrackPublication publication, Participant participant, boolean allowed) {
+    for (RoomListener listener : listeners) {
+      listener.onTrackSubscriptionPermissionChanged(this, publication, participant, allowed);
+    }
+  }
+
+  void notifyTrackSubscriptionFailed(String trackSid, String error) {
+    for (RoomListener listener : listeners) {
+      listener.onTrackSubscriptionFailed(this, trackSid, error);
+    }
+  }
+
+  void notifySignalRequestError(long requestId, String reason, String message) {
+    for (RoomListener listener : listeners) {
+      listener.onSignalRequestError(this, requestId, reason, message);
+    }
+  }
+
+  void notifyLocalTrackSubscribed(TrackPublication publication) {
+    for (RoomListener listener : listeners) {
+      listener.onLocalTrackSubscribed(this, publication);
+    }
+  }
+
+  void notifyRoomMoved() {
+    for (RoomListener listener : listeners) {
+      listener.onRoomMoved(this);
     }
   }
 

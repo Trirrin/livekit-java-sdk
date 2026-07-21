@@ -31,6 +31,7 @@ public class SignalClient {
 
   private WebSocketClient wsClient;
   private SignalState state = SignalState.DISCONNECTED;
+  private boolean autoSubscribe = true;
   private String url;
   private String participantSid;
   private ScheduledFuture<?> pingTask;
@@ -135,7 +136,7 @@ public class SignalClient {
     wsUrl += "?access_token=" + token;
     wsUrl += "&protocol=" + PROTOCOL_VERSION;
     wsUrl += "&sdk=" + SDK_NAME;
-    wsUrl += "&auto_subscribe=true";
+    wsUrl += "&auto_subscribe=" + (autoSubscribe ? "1" : "0");
 
     if (reconnect) {
       wsUrl += "&reconnect=1";
@@ -500,6 +501,11 @@ public class SignalClient {
 
   public void setMaxReconnectAttempts(int maxReconnectAttempts) {
     this.maxReconnectAttempts = maxReconnectAttempts;
+  }
+
+  /** Set whether the server should automatically subscribe this client to published tracks. */
+  public void setAutoSubscribe(boolean autoSubscribe) {
+    this.autoSubscribe = autoSubscribe;
   }
 
   public void setReconnectDelayMs(long reconnectDelayMs) {
