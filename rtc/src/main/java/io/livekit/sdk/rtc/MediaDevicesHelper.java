@@ -96,6 +96,18 @@ public class MediaDevicesHelper {
    * @param name Track name
    */
   public LocalAudioTrack createAudioTrack(String deviceId, String name) {
+    return createAudioTrack(deviceId, name, new AudioCaptureOptions());
+  }
+
+  /**
+   * Create a local audio track with explicit capture processing options.
+   *
+   * @param deviceId Device ID (index as string), or null for default device
+   * @param name Track name
+   * @param captureOptions audio processing options (echo cancellation, noise suppression, ...)
+   */
+  public LocalAudioTrack createAudioTrack(
+      String deviceId, String name, AudioCaptureOptions captureOptions) {
     try {
       if (audioDeviceModule == null) {
         audioDeviceModule = new AudioDeviceModule();
@@ -110,7 +122,7 @@ public class MediaDevicesHelper {
         }
       }
 
-      AudioOptions audioOptions = new AudioOptions();
+      AudioOptions audioOptions = captureOptions.toNative();
       AudioTrackSource audioSource = factory.createAudioSource(audioOptions);
       // Use same ID for native track and LocalAudioTrack so server cid matches
       String trackId = "audio-" + UUID.randomUUID();

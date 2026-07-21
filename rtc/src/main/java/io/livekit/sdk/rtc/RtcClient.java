@@ -234,6 +234,13 @@ public class RtcClient
     return helper != null ? helper.createAudioTrack(deviceId, name) : null;
   }
 
+  /** Create a local audio track with explicit capture processing options. */
+  public LocalAudioTrack createAudioTrack(
+      String deviceId, String name, AudioCaptureOptions captureOptions) {
+    MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
+    return helper != null ? helper.createAudioTrack(deviceId, name, captureOptions) : null;
+  }
+
   /** Create a local video track using the default video device. */
   public LocalVideoTrack createVideoTrack() {
     MediaDevicesHelper helper = rtcEngine.getMediaDevicesHelper();
