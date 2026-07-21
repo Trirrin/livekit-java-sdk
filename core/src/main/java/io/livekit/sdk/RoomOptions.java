@@ -11,6 +11,7 @@ public class RoomOptions {
   private long reconnectDelayMs = 1000;
   private boolean e2eeEnabled = false;
   private E2EEOptions e2eeOptions;
+  private String preferredVideoCodec;
 
   public boolean isAutoSubscribe() {
     return autoSubscribe;
@@ -63,6 +64,16 @@ public class RoomOptions {
 
   public RoomOptions setE2eeEnabled(boolean e2eeEnabled) {
     this.e2eeEnabled = e2eeEnabled;
+    return this;
+  }
+
+  public String getPreferredVideoCodec() {
+    return preferredVideoCodec;
+  }
+
+  /** Preferred codec for published video tracks, by name (e.g. "VP8", "H264", "VP9", "AV1"). */
+  public RoomOptions setPreferredVideoCodec(String preferredVideoCodec) {
+    this.preferredVideoCodec = preferredVideoCodec;
     return this;
   }
 

@@ -23,6 +23,7 @@ public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataC
 
   private final Map<String, RTCRtpSender> trackSenders = new ConcurrentHashMap<>();
   private final List<String> streamIds = new ArrayList<>();
+  private volatile String preferredVideoCodec;
 
   private volatile boolean initialized = false;
 
@@ -186,11 +187,7 @@ public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataC
     if (publisherPc == null || track.getNativeTrack() == null) {
       return;
     }
-
-    RTCRtpSender sender = publisherPc.addTrack(track.getNativeTrack(), streamIds);
-    if (sender != null) {
-      trackSenders.put(track.getId(), sender);
-    }
+    addSendTransceiver(track.getId(), track.getNativeTrack(), false);
   }
 
   @Override
@@ -198,11 +195,75 @@ public class PeerConnectionEngine implements RtcEngine, DataChannelManager.DataC
     if (publisherPc == null || track.getNativeTrack() == null) {
       return;
     }
+    addSendTransceiver(track.getId(), track.getNativeTrack(), true);
+  }
 
-    RTCRtpSender sender = publisherPc.addTrack(track.getNativeTrack(), streamIds);
-    if (sender != null) {
-      trackSenders.put(track.getId(), sender);
+  private void addSendTransceiver(String trackId, MediaStreamTrack nativeTrack, boolean video) {
+    RTCRtpTransceiverInit init = new RTCRtpTransceiverInit();
+    init.direction = RTCRtpTransceiverDirection.SEND_ONLY;
+    init.streamIds = new ArrayList<>(streamIds);
+
+    RTCRtpTransceiver transceiver = publisherPc.addTransceiver(nativeTrack, init);
+    if (transceiver == null) {
+      return;
     }
+    if (video && preferredVideoCodec != null) {
+      applyCodecPreference(transceiver);
+    }
+    RTCRtpSender sender = transceiver.getSender();
+    if (sender != null) {
+      trackSenders.put(trackId, sender);
+    }
+  }
+
+  private void applyCodecPreference(RTCRtpTransceiver transceiver) {
+    try {
+      RTCRtpCapabilities capabilities =
+          factory.getRtpSenderCapabilities(dev.onvoid.webrtc.media.MediaType.VIDEO);
+      List<RTCRtpCodecCapability> preferred = new ArrayList<>();
+      List<RTCRtpCodecCapability> others = new ArrayList<>();
+      for (RTCRtpCodecCapability codec : capabilities.getCodecs()) {
+        if (codec.getName().equalsIgnoreCase(preferredVideoCodec)) {
+          preferred.add(codec);
+        } else {
+          others.add(codec);
+        }
+      }
+      if (preferred.isEmpty()) {
+        return;
+      }
+      preferred.addAll(others);
+      transceiver.setCodecPreferences(preferred);
+    } catch (Exception e) {
+      // Codec preference is best-effort; fall back to defaults
+    }
+  }
+
+  /** Set the preferred video codec by name (e.g. "VP8", "H264", "VP9", "AV1"). */
+  public void setPreferredVideoCodec(String codecName) {
+    this.preferredVideoCodec = codecName;
+  }
+
+  /** Collect stats from the publisher peer connection. */
+  public java.util.concurrent.CompletableFuture<RTCStatsReport> getPublisherStats() {
+    return collectStats(publisherPc);
+  }
+
+  /** Collect stats from the subscriber peer connection. */
+  public java.util.concurrent.CompletableFuture<RTCStatsReport> getSubscriberStats() {
+    return collectStats(subscriberPc);
+  }
+
+  private java.util.concurrent.CompletableFuture<RTCStatsReport> collectStats(
+      RTCPeerConnection pc) {
+    java.util.concurrent.CompletableFuture<RTCStatsReport> future =
+        new java.util.concurrent.CompletableFuture<>();
+    if (pc == null) {
+      future.completeExceptionally(new IllegalStateException("Peer connection not initialized"));
+      return future;
+    }
+    pc.getStats(future::complete);
+    return future;
   }
 
   @Override

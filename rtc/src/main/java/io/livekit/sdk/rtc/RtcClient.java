@@ -72,7 +72,18 @@ public class RtcClient
     this.signalClient.setMaxReconnectAttempts(options.getReconnectAttempts());
     this.signalClient.setReconnectDelayMs(options.getReconnectDelayMs());
     this.rtcEngine.setListener(this);
+    this.rtcEngine.setPreferredVideoCodec(options.getPreferredVideoCodec());
     this.room.setTransport(this);
+  }
+
+  /** Collect WebRTC stats from the publisher peer connection. */
+  public CompletableFuture<dev.onvoid.webrtc.RTCStatsReport> getPublisherStats() {
+    return rtcEngine.getPublisherStats();
+  }
+
+  /** Collect WebRTC stats from the subscriber peer connection. */
+  public CompletableFuture<dev.onvoid.webrtc.RTCStatsReport> getSubscriberStats() {
+    return rtcEngine.getSubscriberStats();
   }
 
   /** Connect to a LiveKit room. */
