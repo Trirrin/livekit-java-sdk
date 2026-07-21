@@ -22,6 +22,7 @@ public class Room implements TrackSubscriptionHandler {
   private RoomSignalHandler signalHandler;
   private RoomTransport transport;
   private io.livekit.sdk.rpc.RpcManager rpcManager;
+  private io.livekit.sdk.datastreams.DataStreamManager dataStreamManager;
 
   public Room() {
     this(new RoomOptions());
@@ -48,15 +49,55 @@ public class Room implements TrackSubscriptionHandler {
     if (transport != null && rpcManager == null) {
       rpcManager = new io.livekit.sdk.rpc.RpcManager(transport);
     }
+    if (transport != null && dataStreamManager == null) {
+      dataStreamManager = new io.livekit.sdk.datastreams.DataStreamManager(transport);
+    }
     if (localParticipant != null) {
       localParticipant.setTransport(transport);
       localParticipant.setRpcManager(rpcManager);
+      localParticipant.setDataStreamManager(dataStreamManager);
     }
   }
 
   /** Get the RPC manager. Available once a transport has been set. */
   public io.livekit.sdk.rpc.RpcManager getRpcManager() {
     return rpcManager;
+  }
+
+  /** Get the data stream manager. Available once a transport has been set. */
+  public io.livekit.sdk.datastreams.DataStreamManager getDataStreamManager() {
+    return dataStreamManager;
+  }
+
+  /** Register a handler for incoming text streams on a topic. */
+  public void registerTextStreamHandler(
+      String topic, io.livekit.sdk.datastreams.TextStreamHandler handler) {
+    requireDataStreamManager().registerTextStreamHandler(topic, handler);
+  }
+
+  public void unregisterTextStreamHandler(String topic) {
+    if (dataStreamManager != null) {
+      dataStreamManager.unregisterTextStreamHandler(topic);
+    }
+  }
+
+  /** Register a handler for incoming byte streams on a topic. */
+  public void registerByteStreamHandler(
+      String topic, io.livekit.sdk.datastreams.ByteStreamHandler handler) {
+    requireDataStreamManager().registerByteStreamHandler(topic, handler);
+  }
+
+  public void unregisterByteStreamHandler(String topic) {
+    if (dataStreamManager != null) {
+      dataStreamManager.unregisterByteStreamHandler(topic);
+    }
+  }
+
+  private io.livekit.sdk.datastreams.DataStreamManager requireDataStreamManager() {
+    if (dataStreamManager == null) {
+      throw new IllegalStateException("No transport available; connect via RtcClient");
+    }
+    return dataStreamManager;
   }
 
   public RoomTransport getTransport() {
@@ -121,6 +162,7 @@ public class Room implements TrackSubscriptionHandler {
     this.localParticipant = ProtoConverter.localParticipantFromProto(response.getParticipant());
     this.localParticipant.setTransport(transport);
     this.localParticipant.setRpcManager(rpcManager);
+    this.localParticipant.setDataStreamManager(dataStreamManager);
 
     // Add local participant tracks
     for (LivekitModels.TrackInfo trackInfo : response.getParticipant().getTracksList()) {
@@ -704,6 +746,21 @@ public class Room implements TrackSubscriptionHandler {
       case RPC_RESPONSE:
         if (rpcManager != null) {
           rpcManager.handleResponse(packet.getRpcResponse());
+        }
+        break;
+      case STREAM_HEADER:
+        if (dataStreamManager != null) {
+          dataStreamManager.handleHeader(packet.getStreamHeader(), packet.getParticipantIdentity());
+        }
+        break;
+      case STREAM_CHUNK:
+        if (dataStreamManager != null) {
+          dataStreamManager.handleChunk(packet.getStreamChunk());
+        }
+        break;
+      case STREAM_TRAILER:
+        if (dataStreamManager != null) {
+          dataStreamManager.handleTrailer(packet.getStreamTrailer());
         }
         break;
       default:

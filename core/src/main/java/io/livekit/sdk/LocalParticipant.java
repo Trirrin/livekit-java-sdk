@@ -9,6 +9,7 @@ public class LocalParticipant extends Participant {
   private LocalTrackManager trackManager;
   private RoomTransport transport;
   private io.livekit.sdk.rpc.RpcManager rpcManager;
+  private io.livekit.sdk.datastreams.DataStreamManager dataStreamManager;
 
   public LocalParticipant(String sid, String identity) {
     super(sid, identity);
@@ -30,6 +31,54 @@ public class LocalParticipant extends Participant {
 
   void setRpcManager(io.livekit.sdk.rpc.RpcManager rpcManager) {
     this.rpcManager = rpcManager;
+  }
+
+  void setDataStreamManager(io.livekit.sdk.datastreams.DataStreamManager dataStreamManager) {
+    this.dataStreamManager = dataStreamManager;
+  }
+
+  private io.livekit.sdk.datastreams.DataStreamManager requireDataStreamManager() {
+    if (dataStreamManager == null) {
+      throw new IllegalStateException("Not connected: no transport available");
+    }
+    return dataStreamManager;
+  }
+
+  /** Send a complete text as a data stream. */
+  public io.livekit.sdk.datastreams.TextStreamInfo sendText(
+      String text, io.livekit.sdk.datastreams.StreamTextOptions options) {
+    return requireDataStreamManager().sendText(text, options);
+  }
+
+  /** Open an incremental text stream. */
+  public io.livekit.sdk.datastreams.TextStreamWriter streamText(
+      io.livekit.sdk.datastreams.StreamTextOptions options) {
+    return requireDataStreamManager().streamText(options);
+  }
+
+  /** Send a complete byte array as a data stream. */
+  public io.livekit.sdk.datastreams.ByteStreamInfo sendBytes(
+      byte[] data, io.livekit.sdk.datastreams.StreamByteOptions options) {
+    return requireDataStreamManager().sendBytes(data, options);
+  }
+
+  /** Send a file as a byte data stream. Name and mime type are derived from the file. */
+  public io.livekit.sdk.datastreams.ByteStreamInfo sendFile(
+      java.io.File file, io.livekit.sdk.datastreams.StreamByteOptions options)
+      throws java.io.IOException {
+    byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
+    options.setName(file.getName());
+    String mimeType = java.nio.file.Files.probeContentType(file.toPath());
+    if (mimeType != null) {
+      options.setMimeType(mimeType);
+    }
+    return requireDataStreamManager().sendBytes(data, options);
+  }
+
+  /** Open an incremental byte stream. */
+  public io.livekit.sdk.datastreams.ByteStreamWriter streamBytes(
+      io.livekit.sdk.datastreams.StreamByteOptions options) {
+    return requireDataStreamManager().streamBytes(options);
   }
 
   private io.livekit.sdk.rpc.RpcManager requireRpcManager() {
