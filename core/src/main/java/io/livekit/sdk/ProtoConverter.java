@@ -150,6 +150,28 @@ public final class ProtoConverter {
     publication.setMimeType(info.getMimeType());
   }
 
+  /** Build a protobuf DataPacket carrying a user payload. */
+  public static LivekitModels.DataPacket buildUserDataPacket(DataPacket packet) {
+    LivekitModels.UserPacket.Builder userBuilder =
+        LivekitModels.UserPacket.newBuilder()
+            .setPayload(com.google.protobuf.ByteString.copyFrom(packet.getData()));
+    if (packet.getTopic() != null) {
+      userBuilder.setTopic(packet.getTopic());
+    }
+
+    LivekitModels.DataPacket.Builder dataBuilder =
+        LivekitModels.DataPacket.newBuilder()
+            .setKind(
+                packet.getKind() == DataPacket.Kind.RELIABLE
+                    ? LivekitModels.DataPacket.Kind.RELIABLE
+                    : LivekitModels.DataPacket.Kind.LOSSY)
+            .setUser(userBuilder.build());
+    if (packet.getDestinationIdentities() != null) {
+      dataBuilder.addAllDestinationIdentities(packet.getDestinationIdentities());
+    }
+    return dataBuilder.build();
+  }
+
   public static LivekitRtc.UpdateParticipantMetadata buildMetadataUpdate(
       String metadata, String name, Map<String, String> attributes) {
     LivekitRtc.UpdateParticipantMetadata.Builder builder =

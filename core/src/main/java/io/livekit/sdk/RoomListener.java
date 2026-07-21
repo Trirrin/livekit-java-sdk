@@ -18,6 +18,11 @@ public interface RoomListener {
   default void onParticipantMetadataChanged(
       Room room, Participant participant, String prevMetadata) {}
 
+  default void onParticipantNameChanged(Room room, Participant participant, String prevName) {}
+
+  default void onParticipantAttributesChanged(
+      Room room, Participant participant, java.util.Map<String, String> prevAttributes) {}
+
   default void onTrackPublished(Room room, TrackPublication publication, Participant participant) {}
 
   default void onTrackUnpublished(

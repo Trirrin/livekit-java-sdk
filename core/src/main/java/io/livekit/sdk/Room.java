@@ -20,6 +20,7 @@ public class Room implements TrackSubscriptionHandler {
   private final List<RoomListener> listeners;
   private final RoomOptions options;
   private RoomSignalHandler signalHandler;
+  private RoomTransport transport;
 
   public Room() {
     this(new RoomOptions());
@@ -38,6 +39,18 @@ public class Room implements TrackSubscriptionHandler {
       signalHandler = new RoomSignalHandler(this);
     }
     return signalHandler;
+  }
+
+  /** Set the outbound transport. Called by the RTC layer that owns signaling and data channels. */
+  public void setTransport(RoomTransport transport) {
+    this.transport = transport;
+    if (localParticipant != null) {
+      localParticipant.setTransport(transport);
+    }
+  }
+
+  public RoomTransport getTransport() {
+    return transport;
   }
 
   /**
@@ -64,12 +77,20 @@ public class Room implements TrackSubscriptionHandler {
     notifyDisconnected(DisconnectReason.CLIENT_INITIATED);
   }
 
-  /** Send data to other participants. */
-  public void publishData(DataPacket packet) {
+  /**
+   * Send data to other participants.
+   *
+   * @return true if the packet was handed to an open data channel
+   */
+  public boolean publishData(DataPacket packet) {
     if (state != ConnectionState.CONNECTED) {
       throw new IllegalStateException("Not connected");
     }
-    // Will be implemented with RTC data channel
+    if (transport == null) {
+      throw new IllegalStateException("No transport available; connect via RtcClient");
+    }
+    boolean reliable = packet.getKind() == DataPacket.Kind.RELIABLE;
+    return transport.sendDataPacket(ProtoConverter.buildUserDataPacket(packet), reliable);
   }
 
   void clearParticipants() {
@@ -85,6 +106,7 @@ public class Room implements TrackSubscriptionHandler {
 
     // Create local participant
     this.localParticipant = ProtoConverter.localParticipantFromProto(response.getParticipant());
+    this.localParticipant.setTransport(transport);
 
     // Add local participant tracks
     for (LivekitModels.TrackInfo trackInfo : response.getParticipant().getTracksList()) {
@@ -110,7 +132,7 @@ public class Room implements TrackSubscriptionHandler {
   private void handleParticipantInfo(LivekitModels.ParticipantInfo info) {
     // Skip if this is us
     if (localParticipant != null && info.getSid().equals(localParticipant.getSid())) {
-      ProtoConverter.updateParticipantFromProto(localParticipant, info);
+      applyParticipantUpdate(localParticipant, info);
       syncParticipantTracks(localParticipant, info.getTracksList());
       return;
     }
@@ -130,13 +152,32 @@ public class Room implements TrackSubscriptionHandler {
       participant = ProtoConverter.remoteParticipantFromProto(info);
       remoteParticipants.put(info.getIdentity(), participant);
     } else {
-      ProtoConverter.updateParticipantFromProto(participant, info);
+      applyParticipantUpdate(participant, info);
     }
 
     syncParticipantTracks(participant, info.getTracksList());
 
     if (isNew) {
       notifyParticipantConnected(participant);
+    }
+  }
+
+  /** Apply a participant info update to an existing participant, firing change events. */
+  private void applyParticipantUpdate(Participant participant, LivekitModels.ParticipantInfo info) {
+    String prevMetadata = participant.getMetadata();
+    String prevName = participant.getName();
+    Map<String, String> prevAttributes = new java.util.HashMap<>(participant.getAttributes());
+
+    ProtoConverter.updateParticipantFromProto(participant, info);
+
+    if (!java.util.Objects.equals(prevMetadata, participant.getMetadata())) {
+      notifyParticipantMetadataChanged(participant, prevMetadata);
+    }
+    if (!java.util.Objects.equals(prevName, participant.getName())) {
+      notifyParticipantNameChanged(participant, prevName);
+    }
+    if (!participant.getAttributes().equals(prevAttributes)) {
+      notifyParticipantAttributesChanged(participant, prevAttributes);
     }
   }
 
@@ -439,6 +480,25 @@ public class Room implements TrackSubscriptionHandler {
   void notifyRoomMetadataChanged(String metadata) {
     for (RoomListener listener : listeners) {
       listener.onRoomMetadataChanged(this, metadata);
+    }
+  }
+
+  void notifyParticipantMetadataChanged(Participant participant, String prevMetadata) {
+    for (RoomListener listener : listeners) {
+      listener.onParticipantMetadataChanged(this, participant, prevMetadata);
+    }
+  }
+
+  void notifyParticipantNameChanged(Participant participant, String prevName) {
+    for (RoomListener listener : listeners) {
+      listener.onParticipantNameChanged(this, participant, prevName);
+    }
+  }
+
+  void notifyParticipantAttributesChanged(
+      Participant participant, Map<String, String> prevAttributes) {
+    for (RoomListener listener : listeners) {
+      listener.onParticipantAttributesChanged(this, participant, prevAttributes);
     }
   }
 

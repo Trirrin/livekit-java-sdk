@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LocalParticipant extends Participant {
   private final Map<String, TrackPublication> localTrackPublications;
   private LocalTrackManager trackManager;
+  private RoomTransport transport;
 
   public LocalParticipant(String sid, String identity) {
     super(sid, identity);
@@ -16,6 +17,14 @@ public class LocalParticipant extends Participant {
   /** Set the track manager for controlling local media tracks. */
   public void setTrackManager(LocalTrackManager trackManager) {
     this.trackManager = trackManager;
+  }
+
+  void setTransport(RoomTransport transport) {
+    this.transport = transport;
+  }
+
+  RoomTransport getTransport() {
+    return transport;
   }
 
   /** Get the track manager. */
@@ -72,21 +81,56 @@ public class LocalParticipant extends Participant {
     return trackManager != null && trackManager.isScreenShareEnabled();
   }
 
-  /** Update participant metadata. */
+  /**
+   * Update the local participant's metadata on the server. Requires the
+   * canUpdateOwnParticipantMetadata permission. Local state is updated when the server confirms via
+   * a participant update, which also fires {@code onParticipantMetadataChanged}.
+   */
+  public void updateMetadata(String metadata) {
+    sendMetadataUpdate(metadata, null, null);
+  }
+
+  /** Update the local participant's display name on the server. */
+  public void updateName(String name) {
+    sendMetadataUpdate(null, name, null);
+  }
+
+  /**
+   * Update the local participant's attributes on the server. Only the provided keys are updated; to
+   * delete an attribute, set its value to an empty string.
+   */
+  public void updateAttributes(Map<String, String> attributes) {
+    sendMetadataUpdate(null, null, attributes);
+  }
+
+  private void sendMetadataUpdate(String metadata, String name, Map<String, String> attributes) {
+    if (transport == null) {
+      throw new IllegalStateException("Not connected: no transport available");
+    }
+    transport.sendUpdateMetadata(ProtoConverter.buildMetadataUpdate(metadata, name, attributes));
+  }
+
+  /**
+   * @deprecated Use {@link #updateMetadata(String)}.
+   */
+  @Deprecated
   public void setParticipantMetadata(String metadata) {
-    this.metadata = metadata;
-    // Send update to server via signaling
+    updateMetadata(metadata);
   }
 
-  /** Update participant name. */
+  /**
+   * @deprecated Use {@link #updateName(String)}.
+   */
+  @Deprecated
   public void setParticipantName(String name) {
-    this.name = name;
-    // Send update to server via signaling
+    updateName(name);
   }
 
-  /** Update participant attributes. */
+  /**
+   * @deprecated Use {@link #updateAttributes(Map)}.
+   */
+  @Deprecated
   public void setParticipantAttributes(Map<String, String> attributes) {
-    setAttributes(attributes);
-    // Send update to server via signaling
+    updateAttributes(attributes);
   }
 }

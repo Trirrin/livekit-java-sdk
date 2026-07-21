@@ -28,7 +28,8 @@ import livekit.LivekitRtc;
  * Main client that coordinates Room, SignalClient, and RtcEngine. This is the primary entry point
  * for connecting to a LiveKit room with full media support.
  */
-public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackManager {
+public class RtcClient
+    implements SignalListener, RtcEngineListener, LocalTrackManager, io.livekit.sdk.RoomTransport {
 
   private final Room room;
   private final SignalClient signalClient;
@@ -58,6 +59,7 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
 
     this.signalClient.addListener(this);
     this.rtcEngine.setListener(this);
+    this.room.setTransport(this);
   }
 
   /** Connect to a LiveKit room. */
@@ -127,29 +129,40 @@ public class RtcClient implements SignalListener, RtcEngineListener, LocalTrackM
   /** Send data to other participants. */
   public boolean publishData(io.livekit.sdk.DataPacket packet) {
     boolean reliable = packet.getKind() == io.livekit.sdk.DataPacket.Kind.RELIABLE;
+    return sendDataPacket(io.livekit.sdk.ProtoConverter.buildUserDataPacket(packet), reliable);
+  }
 
-    // Build protobuf DataPacket
-    LivekitModels.UserPacket.Builder userBuilder =
-        LivekitModels.UserPacket.newBuilder()
-            .setPayload(com.google.protobuf.ByteString.copyFrom(packet.getData()));
+  // RoomTransport implementation
 
-    if (packet.getTopic() != null) {
-      userBuilder.setTopic(packet.getTopic());
-    }
+  @Override
+  public void sendUpdateMetadata(LivekitRtc.UpdateParticipantMetadata metadata) {
+    signalClient.sendUpdateMetadata(metadata);
+  }
 
-    LivekitModels.DataPacket.Builder dataBuilder =
-        LivekitModels.DataPacket.newBuilder()
-            .setKind(
-                reliable
-                    ? LivekitModels.DataPacket.Kind.RELIABLE
-                    : LivekitModels.DataPacket.Kind.LOSSY)
-            .setUser(userBuilder.build());
+  @Override
+  public void sendUpdateSubscription(LivekitRtc.UpdateSubscription subscription) {
+    signalClient.sendUpdateSubscription(subscription);
+  }
 
-    if (packet.getDestinationIdentities() != null) {
-      dataBuilder.addAllDestinationIdentities(packet.getDestinationIdentities());
-    }
+  @Override
+  public void sendUpdateTrackSettings(LivekitRtc.UpdateTrackSettings settings) {
+    signalClient.sendUpdateTrackSettings(settings);
+  }
 
-    return rtcEngine.sendData(dataBuilder.build().toByteArray(), reliable);
+  @Override
+  public void sendSubscriptionPermission(LivekitRtc.SubscriptionPermission permission) {
+    signalClient.sendSubscriptionPermission(permission);
+  }
+
+  @Override
+  public void sendMuteTrack(String trackSid, boolean muted) {
+    signalClient.sendMuteTrack(
+        LivekitRtc.MuteTrackRequest.newBuilder().setSid(trackSid).setMuted(muted).build());
+  }
+
+  @Override
+  public boolean sendDataPacket(LivekitModels.DataPacket packet, boolean reliable) {
+    return rtcEngine.sendData(packet.toByteArray(), reliable);
   }
 
   public Room getRoom() {
