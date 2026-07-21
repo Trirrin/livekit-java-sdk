@@ -50,4 +50,22 @@ public interface SignalListener {
 
   /** Called when an ICE restart should be triggered due to connection issues. */
   default void onIceRestartRequired(ReconnectReason reason) {}
+
+  /** Called when the server responds to a request that carried a request_id. */
+  default void onRequestResponse(LivekitRtc.RequestResponse response) {}
+
+  /** Called when the max subscribed quality of a published track changed (dynacast). */
+  default void onSubscribedQualityUpdate(LivekitRtc.SubscribedQualityUpdate update) {}
+
+  /** Called when a track subscription permission changed. */
+  default void onSubscriptionPermissionUpdate(LivekitRtc.SubscriptionPermissionUpdate update) {}
+
+  /** Called when the server responds to a subscription request, including failures. */
+  default void onSubscriptionResponse(LivekitRtc.SubscriptionResponse response) {}
+
+  /** Called when one of the local participant's tracks is subscribed for the first time. */
+  default void onLocalTrackSubscribed(LivekitRtc.TrackSubscribed trackSubscribed) {}
+
+  /** Called when the participant has been moved to a new room by the server. */
+  default void onRoomMoved(LivekitRtc.RoomMovedResponse moved) {}
 }

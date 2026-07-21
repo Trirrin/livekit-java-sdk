@@ -19,6 +19,10 @@ import org.java_websocket.handshake.ServerHandshake;
  * parsing.
  */
 public class SignalClient {
+  /** LiveKit signal protocol version this client implements. */
+  public static final int PROTOCOL_VERSION = 17;
+
+  private static final String SDK_NAME = "java";
   private static final long PING_INTERVAL_MS = 10000;
   private static final long PING_TIMEOUT_MS = 15000;
 
@@ -129,7 +133,8 @@ public class SignalClient {
 
     // Add query parameters
     wsUrl += "?access_token=" + token;
-    wsUrl += "&protocol=13"; // Protocol version
+    wsUrl += "&protocol=" + PROTOCOL_VERSION;
+    wsUrl += "&sdk=" + SDK_NAME;
     wsUrl += "&auto_subscribe=true";
 
     if (reconnect) {
@@ -198,7 +203,7 @@ public class SignalClient {
     }
   }
 
-  private void processSignalResponse(LivekitRtc.SignalResponse response) {
+  void processSignalResponse(LivekitRtc.SignalResponse response) {
     switch (response.getMessageCase()) {
       case JOIN:
         LivekitRtc.JoinResponse joinResponse = response.getJoin();
@@ -271,6 +276,28 @@ public class SignalClient {
       case PONG_RESP:
         lastPongTimestamp = System.currentTimeMillis();
         notifyPong(response.getPongResp().getTimestamp());
+        break;
+      case REQUEST_RESPONSE:
+        notifyRequestResponse(response.getRequestResponse());
+        break;
+      case SUBSCRIBED_QUALITY_UPDATE:
+        notifySubscribedQualityUpdate(response.getSubscribedQualityUpdate());
+        break;
+      case SUBSCRIPTION_PERMISSION_UPDATE:
+        notifySubscriptionPermissionUpdate(response.getSubscriptionPermissionUpdate());
+        break;
+      case SUBSCRIPTION_RESPONSE:
+        notifySubscriptionResponse(response.getSubscriptionResponse());
+        break;
+      case TRACK_SUBSCRIBED:
+        notifyLocalTrackSubscribed(response.getTrackSubscribed());
+        break;
+      case ROOM_MOVED:
+        LivekitRtc.RoomMovedResponse moved = response.getRoomMoved();
+        if (tokenManager != null && !moved.getToken().isEmpty()) {
+          tokenManager.updateToken(moved.getToken());
+        }
+        notifyRoomMoved(moved);
         break;
       default:
         // Unknown message type
@@ -432,6 +459,30 @@ public class SignalClient {
   public void sendUpdateMetadata(LivekitRtc.UpdateParticipantMetadata metadata) {
     LivekitRtc.SignalRequest request =
         LivekitRtc.SignalRequest.newBuilder().setUpdateMetadata(metadata).build();
+    sendRequest(request);
+  }
+
+  public void sendUpdateTrackSettings(LivekitRtc.UpdateTrackSettings settings) {
+    LivekitRtc.SignalRequest request =
+        LivekitRtc.SignalRequest.newBuilder().setTrackSetting(settings).build();
+    sendRequest(request);
+  }
+
+  public void sendSubscriptionPermission(LivekitRtc.SubscriptionPermission permission) {
+    LivekitRtc.SignalRequest request =
+        LivekitRtc.SignalRequest.newBuilder().setSubscriptionPermission(permission).build();
+    sendRequest(request);
+  }
+
+  public void sendUpdateLocalAudioTrack(LivekitRtc.UpdateLocalAudioTrack update) {
+    LivekitRtc.SignalRequest request =
+        LivekitRtc.SignalRequest.newBuilder().setUpdateAudioTrack(update).build();
+    sendRequest(request);
+  }
+
+  public void sendUpdateLocalVideoTrack(LivekitRtc.UpdateLocalVideoTrack update) {
+    LivekitRtc.SignalRequest request =
+        LivekitRtc.SignalRequest.newBuilder().setUpdateVideoTrack(update).build();
     sendRequest(request);
   }
 
@@ -610,6 +661,42 @@ public class SignalClient {
   private void notifyIceRestartRequired(ReconnectReason reason) {
     for (SignalListener listener : listeners) {
       listener.onIceRestartRequired(reason);
+    }
+  }
+
+  private void notifyRequestResponse(LivekitRtc.RequestResponse response) {
+    for (SignalListener listener : listeners) {
+      listener.onRequestResponse(response);
+    }
+  }
+
+  private void notifySubscribedQualityUpdate(LivekitRtc.SubscribedQualityUpdate update) {
+    for (SignalListener listener : listeners) {
+      listener.onSubscribedQualityUpdate(update);
+    }
+  }
+
+  private void notifySubscriptionPermissionUpdate(LivekitRtc.SubscriptionPermissionUpdate update) {
+    for (SignalListener listener : listeners) {
+      listener.onSubscriptionPermissionUpdate(update);
+    }
+  }
+
+  private void notifySubscriptionResponse(LivekitRtc.SubscriptionResponse response) {
+    for (SignalListener listener : listeners) {
+      listener.onSubscriptionResponse(response);
+    }
+  }
+
+  private void notifyLocalTrackSubscribed(LivekitRtc.TrackSubscribed trackSubscribed) {
+    for (SignalListener listener : listeners) {
+      listener.onLocalTrackSubscribed(trackSubscribed);
+    }
+  }
+
+  private void notifyRoomMoved(LivekitRtc.RoomMovedResponse moved) {
+    for (SignalListener listener : listeners) {
+      listener.onRoomMoved(moved);
     }
   }
 
