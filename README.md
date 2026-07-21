@@ -6,12 +6,20 @@ Java client SDK for [LiveKit](https://livekit.io) real-time communication platfo
 
 ## Features
 
-- **Room Management** - Join/leave rooms, handle participants and tracks
-- **WebRTC Integration** - Audio/video publishing and subscribing via [webrtc-java](https://github.com/niclasvaneyk/webrtc-java)
+- **Room Management** - Join/leave rooms, handle participants and tracks (signal protocol 17)
+- **WebRTC Integration** - Audio/video publishing and subscribing via [webrtc-java](https://github.com/devopvoid/webrtc-java)
+- **Screen Sharing** - Publish screens or application windows
+- **Subscription Controls** - Subscribe/unsubscribe, video quality, dimensions, and fps per track
+- **Participant Updates** - Metadata, name, and attributes updates with change events
 - **Data Channels** - Reliable and lossy data messaging
+- **RPC** - Call methods on remote participants (`performRpc`, `registerRpcMethod`)
+- **Data Streams** - Chunked text/byte/file streams with topic handlers (`sendText`, `sendFile`)
+- **Chat & Transcription** - Chat messages, transcription segments, and SIP DTMF events
 - **E2EE** - End-to-end encryption for data channels (AES-GCM with key ratcheting)
 - **Auto Reconnection** - Automatic reconnection with exponential backoff
 - **Network Monitoring** - Resume tokens and network change detection
+- **Audio Processing** - Echo cancellation, noise suppression, auto gain control options
+- **Stats & Codecs** - WebRTC stats and preferred video codec selection
 
 ## Requirements
 
