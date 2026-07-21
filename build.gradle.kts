@@ -6,9 +6,17 @@ plugins {
     id("com.diffplug.spotless") version "6.25.0"
 }
 
+// Gradle always defines a `version` property (defaulting to "unspecified"), so a plain
+// elvis fallback would never fire. Treat the default as absent instead.
+val releaseVersion =
+    findProperty("version")
+        ?.toString()
+        ?.takeUnless { it.isBlank() || it == Project.DEFAULT_VERSION }
+        ?.removePrefix("v")
+
 allprojects {
     group = "com.github.Trirrin.livekit-java-sdk"
-    version = project.findProperty("version")?.toString()?.removePrefix("v") ?: "0.1.0-SNAPSHOT"
+    version = releaseVersion ?: "0.1.0-SNAPSHOT"
 }
 
 subprojects {
@@ -58,8 +66,10 @@ subprojects {
 
                     pom {
                         name.set("LiveKit Java SDK - ${project.name}")
-                        description.set("Java client SDK for LiveKit real-time communication platform")
-                        url.set("https://github.com/livekit/livekit-java-sdk")
+                        description.set(
+                            "Unofficial Java client SDK for the LiveKit real-time communication platform",
+                        )
+                        url.set("https://github.com/Trirrin/livekit-java-sdk")
 
                         licenses {
                             license {
@@ -70,16 +80,16 @@ subprojects {
 
                         developers {
                             developer {
-                                id.set("livekit")
-                                name.set("LiveKit")
-                                email.set("support@livekit.io")
+                                id.set("Trirrin")
+                                name.set("Trirrin")
+                                url.set("https://github.com/Trirrin")
                             }
                         }
 
                         scm {
-                            connection.set("scm:git:git://github.com/livekit/livekit-java-sdk.git")
-                            developerConnection.set("scm:git:ssh://github.com/livekit/livekit-java-sdk.git")
-                            url.set("https://github.com/livekit/livekit-java-sdk")
+                            connection.set("scm:git:git://github.com/Trirrin/livekit-java-sdk.git")
+                            developerConnection.set("scm:git:ssh://github.com/Trirrin/livekit-java-sdk.git")
+                            url.set("https://github.com/Trirrin/livekit-java-sdk")
                         }
                     }
                 }
