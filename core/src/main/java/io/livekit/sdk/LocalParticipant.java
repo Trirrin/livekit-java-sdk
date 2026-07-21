@@ -81,6 +81,43 @@ public class LocalParticipant extends Participant {
     return requireDataStreamManager().streamBytes(options);
   }
 
+  /** Send a chat message to all participants. */
+  public ChatMessage sendChatMessage(String text) {
+    ChatMessage message =
+        new ChatMessage(
+            java.util.UUID.randomUUID().toString(),
+            System.currentTimeMillis(),
+            text,
+            null,
+            false,
+            false);
+    sendChatMessagePacket(message);
+    return message;
+  }
+
+  /** Edit a previously sent chat message, keeping its id. */
+  public ChatMessage editChatMessage(String newText, ChatMessage original) {
+    ChatMessage edited =
+        new ChatMessage(
+            original.getId(),
+            original.getTimestamp(),
+            newText,
+            System.currentTimeMillis(),
+            original.isDeleted(),
+            original.isGenerated());
+    sendChatMessagePacket(edited);
+    return edited;
+  }
+
+  private void sendChatMessagePacket(ChatMessage message) {
+    if (transport == null) {
+      throw new IllegalStateException("Not connected: no transport available");
+    }
+    livekit.LivekitModels.DataPacket packet =
+        livekit.LivekitModels.DataPacket.newBuilder().setChatMessage(message.toProto()).build();
+    transport.sendDataPacket(packet, true);
+  }
+
   private io.livekit.sdk.rpc.RpcManager requireRpcManager() {
     if (rpcManager == null) {
       throw new IllegalStateException("Not connected: no transport available");

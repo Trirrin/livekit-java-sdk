@@ -70,4 +70,20 @@ public interface RoomListener {
 
   /** Called after the server moved this participant to a different room. */
   default void onRoomMoved(Room room) {}
+
+  /**
+   * Called when transcription segments are received for a participant's audio track. Segments with
+   * the same id are updated versions of the same utterance until marked final.
+   */
+  default void onTranscriptionReceived(
+      Room room,
+      Participant participant,
+      TrackPublication publication,
+      java.util.List<TranscriptionSegment> segments) {}
+
+  /** Called when a chat message is received; sender is null if unknown. */
+  default void onChatMessageReceived(Room room, ChatMessage message, RemoteParticipant sender) {}
+
+  /** Called when SIP DTMF tones are received. */
+  default void onSipDtmfReceived(Room room, RemoteParticipant sender, int code, String digit) {}
 }

@@ -679,6 +679,25 @@ public class Room implements TrackSubscriptionHandler {
     }
   }
 
+  void notifyTranscriptionReceived(
+      Participant participant, TrackPublication publication, List<TranscriptionSegment> segments) {
+    for (RoomListener listener : listeners) {
+      listener.onTranscriptionReceived(this, participant, publication, segments);
+    }
+  }
+
+  void notifyChatMessageReceived(ChatMessage message, RemoteParticipant sender) {
+    for (RoomListener listener : listeners) {
+      listener.onChatMessageReceived(this, message, sender);
+    }
+  }
+
+  void notifySipDtmfReceived(RemoteParticipant sender, int code, String digit) {
+    for (RoomListener listener : listeners) {
+      listener.onSipDtmfReceived(this, sender, code, digit);
+    }
+  }
+
   // TrackSubscriptionHandler implementation
 
   @Override
@@ -763,9 +782,40 @@ public class Room implements TrackSubscriptionHandler {
           dataStreamManager.handleTrailer(packet.getStreamTrailer());
         }
         break;
+      case TRANSCRIPTION:
+        handleTranscription(packet.getTranscription());
+        break;
+      case CHAT_MESSAGE:
+        notifyChatMessageReceived(
+            ChatMessage.fromProto(packet.getChatMessage()), findSender(packet));
+        break;
+      case SIP_DTMF:
+        LivekitModels.SipDTMF dtmf = packet.getSipDtmf();
+        notifySipDtmfReceived(findSender(packet), dtmf.getCode(), dtmf.getDigit());
+        break;
       default:
         break;
     }
+  }
+
+  private void handleTranscription(LivekitModels.Transcription transcription) {
+    Participant participant = null;
+    String identity = transcription.getTranscribedParticipantIdentity();
+    if (!identity.isEmpty()) {
+      if (localParticipant != null && identity.equals(localParticipant.getIdentity())) {
+        participant = localParticipant;
+      } else {
+        participant = remoteParticipants.get(identity);
+      }
+    }
+    TrackPublication publication =
+        participant != null ? participant.getTrackPublication(transcription.getTrackId()) : null;
+
+    List<TranscriptionSegment> segments = new ArrayList<>();
+    for (LivekitModels.TranscriptionSegment segment : transcription.getSegmentsList()) {
+      segments.add(TranscriptionSegment.fromProto(segment));
+    }
+    notifyTranscriptionReceived(participant, publication, segments);
   }
 
   private RemoteParticipant findSender(LivekitModels.DataPacket packet) {
